@@ -42,6 +42,7 @@
         <module>rms-user</module>
         <module>rms-api</module>
         <module>rms-test</module>
+        <module>comment</module>
     </modules>
     <dependencies>
         <dependency>
