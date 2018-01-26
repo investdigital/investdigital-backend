@@ -14,14 +14,17 @@ import java.util.*;
  * 初始化敏感词库<br>
  * 将敏感词加入到HashMap中<br>
  * 构建DFA算法模型
+ * @author zhulei
  */
 @SuppressWarnings({ "rawtypes", "unchecked" })
 public class SensitiveWordInit {
 
     private static String wordPath;
 
-    // 字符编码
-    private String ENCODING = "UTF-8";
+    /**
+     * 字符编码
+     */
+    private final String ENCODING = "UTF-8";
 
     static {
         InputStream in = SensitiveWordInit.class.getClassLoader().getResourceAsStream("application.properties");
@@ -123,19 +126,12 @@ public class SensitiveWordInit {
 
                 // 读取文件，将文件内容放入到set中
                 while ((txt = bufferedReader.readLine()) != null) {
-                    //sb.append(txt);
+                    /*sb.append(txt);*/
                     wordSet.add(txt.trim());
                 }
                 bufferedReader.close();
-
-               /* String str = sb.toString();
-                String[] ss = str.split("#");
-                for (String s : ss) {
-                    wordSet.add(s);
-                }*/
             }
 
-            // 关闭文件流
             read.close();
 
         } catch (Exception e) {

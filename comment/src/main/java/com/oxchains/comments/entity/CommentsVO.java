@@ -2,6 +2,7 @@ package com.oxchains.comments.entity;
 
 import javax.persistence.*;
 import java.util.Date;
+import java.util.List;
 
 /**
  * @author ccl
@@ -9,80 +10,65 @@ import java.util.Date;
  * @name Comments
  * @desc:
  */
-public class CommentsVO {
+public class CommentsVO extends Comments{
+    private List<CommentsReplyVO> replies;
 
-    private Long id;
-    private Integer appKey;
-    private Long itemId;
-    private Long userId;
-    private Date createTime;
-    private String comments;
-    private String username;
-    private String avatar;
-
-    public Long getId() {
-        return id;
+    public List<CommentsReplyVO> getReplies() {
+        return replies;
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    public void setReplies(List<CommentsReplyVO> replies) {
+        this.replies = replies;
     }
 
-    public Integer getAppKey() {
-        return appKey;
+    public CommentsVO() {}
+    public CommentsVO(Comments comments) {
+        setId(comments.getId());
+        setAppKey(comments.getAppKey());
+        setItemId(comments.getItemId());
+        setUserId(comments.getUserId());
+        setUsername(comments.getUsername());
+        setAvatar(comments.getAvatar());
+        setContents(comments.getContents());
+        setCreateTime(comments.getCreateTime());
+        setApproval(comments.getApproval());
+        setDisapproval(comments.getDisapproval());
     }
 
-    public void setAppKey(Integer appKey) {
-        this.appKey = appKey;
+    private Integer approvaled;
+
+    public Integer getApprovaled() {
+        return approvaled;
     }
 
-    public Long getItemId() {
-        return itemId;
+    public void setApprovaled(Integer approvaled) {
+        this.approvaled = approvaled;
     }
 
-    public void setItemId(Long itemId) {
-        this.itemId = itemId;
+    public Comments commentsVO2Comments(){
+        if(null != this){
+            Comments comments = new Comments();
+            comments.setId(this.getId());
+            comments.setAppKey(this.getAppKey());
+            comments.setItemId(this.getItemId());
+            comments.setUserId(this.getUserId());
+            comments.setUsername(this.getUsername());
+            comments.setAvatar(this.getAvatar());
+            comments.setContents(this.getContents());
+            comments.setCreateTime(this.getCreateTime());
+            comments.setApproval(this.getApproval());
+            comments.setDisapproval(this.getDisapproval());
+            return comments;
+        }
+        return null;
     }
 
-    public Long getUserId() {
-        return userId;
+    @Override
+    public String toString() {
+        super.toString();
+        return "CommentsVO{" +
+                "replies=" + replies +
+                ", approvaled=" + approvaled +
+                '}';
     }
-
-    public void setUserId(Long userId) {
-        this.userId = userId;
-    }
-
-    public Date getCreateTime() {
-        return createTime;
-    }
-
-    public void setCreateTime(Date createTime) {
-        this.createTime = createTime;
-    }
-
-    public String getComments() {
-        return comments;
-    }
-
-    public void setComments(String comments) {
-        this.comments = comments;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getAvatar() {
-        return avatar;
-    }
-
-    public void setAvatar(String avatar) {
-        this.avatar = avatar;
-    }
-
-
 }

@@ -12,14 +12,13 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface CommentsFavorRepo extends CrudRepository<CommentsFavor, Long> {
-
+    /**
+     *
+     */
+    CommentsFavor findByAppKeyAndItemIdAndCommentsIdAndUserIdAndCommentsReplyId(String appKey, Long itemId, Long commentsId, Long userId, Long commentsReplyId);
 
     /**
      *
      */
-    //Page<Comments> findByAppKeyAndItemIdOrderByCreateTimeDesc(String appKey, Long itemId, Pageable pageable);
-
-
-    CommentsFavor findByAppKeyAndItemIdAndCommentsIdAndUserIdAndCommentsReplyId(String appKey, Long itemId, Long commentsId, Long userId, Long commentsReplyId);
     CommentsFavor findByAppKeyAndItemIdAndCommentsIdAndCommentsReplyId(String appKey, Long itemId, Long commentsId, Long commentsReplyId);
 }

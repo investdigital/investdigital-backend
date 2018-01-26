@@ -115,4 +115,6 @@ public class Comments {
     public void setApproval(Integer approval) {
         this.approval = approval;
     }
+
+
 }

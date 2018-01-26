@@ -4,9 +4,7 @@ import com.oxchains.comments.common.ConstEnum;
 import com.oxchains.comments.common.RestResp;
 import com.oxchains.comments.common.RestRespPage;
 import com.oxchains.comments.common.WordFilter;
-import com.oxchains.comments.entity.Comments;
-import com.oxchains.comments.entity.CommentsFavor;
-import com.oxchains.comments.entity.CommentsReply;
+import com.oxchains.comments.entity.*;
 import com.oxchains.comments.repo.CommentsFavorRepo;
 import com.oxchains.comments.repo.CommentsReplyRepo;
 import com.oxchains.comments.repo.CommentsRepo;
@@ -17,6 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -68,12 +67,17 @@ public class CommentsService {
             pageNo = pageNo == null ? 1 :pageNo;
             Pageable pageable = new PageRequest((pageNo-1)*pageSize, pageSize);
             Page<Comments> page = commentsRepo.findByAppKeyAndItemIdOrderByCreateTimeDesc(appKey,itemId,pageable);
-            List<Comments> list = page.getContent();
-            for(int i = 0; i < list.size(); i++){
-                String contents = list.get(i).getContents();
+
+            List<CommentsVO> list = new ArrayList<>();
+            for(Comments comments : page.getContent()){
+                String contents = comments.getContents();
                 if(WordFilter.isContainSensitiveWord(contents)){
-                    list.get(i).setContents(WordFilter.replaceSensitiveWord(contents));
+                    comments.setContents(WordFilter.replaceSensitiveWord(contents));
                 }
+                CommentsVO commentsVO = new CommentsVO(comments);
+                List<CommentsReplyVO> relies = getCommentsReplyVO(comments.getId());
+                commentsVO.setReplies(relies);
+                list.add(commentsVO);
             }
             return RestRespPage.success(list,page.getTotalElements());
         }catch (Exception e){
@@ -110,29 +114,43 @@ public class CommentsService {
     }
 
     /**
-     * 为评论或回复点赞
+     * 为评论点赞或取消点赞
      */
     public RestResp addCommentFavor(CommentsFavor favor){
+        int approval = 0;
+        int disapproval = 0;
+        if(favor.getFavor() == 1){
+            approval = 1;
+        } else {
+            approval = -1;
+        }
+
         try {
+            int type = favor.getType();
+            switch (type){
+                //评论
+                case 1:
+                    Comments comments = commentsRepo.findOne(favor.getCommentsId());
+                    comments.setApproval(comments.getApproval()==null?approval: comments.getApproval() + approval);
+                    commentsRepo.save(comments);
+                    break;
+                //回复
+                case 2:
+                    CommentsReply reply = commentsReplyRepo.findOne(favor.getCommentsReplyId());
+                    reply.setApproval(reply.getApproval() == null ? approval : reply.getApproval() + approval);
+                    commentsReplyRepo.save(reply);
+                    break;
+                default:
+                    break;
+            }
+
             CommentsFavor commentsFavor =
                     commentsFavorRepo.findByAppKeyAndItemIdAndCommentsIdAndUserIdAndCommentsReplyId(favor.getAppKey(),
                             favor.getItemId(),favor.getCommentsId(),favor.getUserId(),favor.getCommentsReplyId());
             if(null != commentsFavor){
-                int type = favor.getType();
-                switch (type){
-                    case 1://评论
-                        //Comments comments = commentsRepo.findOne(commentsFavor.getCommentsId());
-                        //if(commentsFavor.getFavor())
-                        break;
-                    case 2://回复
-                        break;
-                    default:
-                        break;
-                }
-
                 commentsFavor.setFavor(favor.getFavor());
                 favor = commentsFavorRepo.save(commentsFavor);
-            }else {
+            } else {
                 favor.setCreateTime(new Date());
                 favor = commentsFavorRepo.save(favor);
             }
@@ -144,5 +162,16 @@ public class CommentsService {
         return RestResp.fail();
     }
 
+    public List<CommentsReplyVO> getCommentsReplyVO(Long commentsId){
+        List<CommentsReply> replies = commentsReplyRepo.findByCommentsIdOrderByCreateTimeDesc(commentsId);
+        List<CommentsReplyVO> res = null;
+        if(null != replies && replies.size()>0){
+            res = new ArrayList<>(replies.size());
+            for (CommentsReply reply : replies){
+                res.add(new CommentsReplyVO(reply));
+            }
+        }
+        return res;
+    }
 
 }

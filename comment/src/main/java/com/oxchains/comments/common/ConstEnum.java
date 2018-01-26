@@ -53,7 +53,14 @@ public interface   ConstEnum {
     }
 
     enum FavorType implements ConstEnum{
-        COMMENT(1),REPLAY(2);
+        /**
+         * 评论
+         */
+        COMMENT(1),
+        /**
+         * 回复
+         */
+        REPLAY(2);
         private int type;
         FavorType(int type){
             this.type = type;

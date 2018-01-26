@@ -13,6 +13,8 @@ import java.util.Set;
  */
 public class WordFilter {
 
+    private static final int MATCH_FLAG_LENGTH = 2;
+
     private static WordFilter wordFilter;
 
     private static Map sensitiveWordMap = null;
@@ -32,7 +34,7 @@ public class WordFilter {
         for (int i = 0; i < txt.length(); i++) {
 
             // 判断是否包含敏感字符
-            int matchFlag = CheckSensitiveWord(txt, i);
+            int matchFlag = checkSensitiveWord(txt, i);
 
             // 大于0存在，返回true
             if (matchFlag > 0) {
@@ -96,7 +98,7 @@ public class WordFilter {
         for (int i = 0; i < txt.length(); i++) {
 
             // 判断是否包含敏感字符
-            int length = CheckSensitiveWord(txt, i);
+            int length = checkSensitiveWord(txt, i);
 
             // 存在,加入list中
             if (length > 0) {
@@ -118,7 +120,7 @@ public class WordFilter {
      * @param beginIndex
      * @return
      */
-    private static int CheckSensitiveWord(String txt, int beginIndex) {
+    private static int checkSensitiveWord(String txt, int beginIndex) {
 
         // 敏感词结束标识位：用于敏感词只有1位的情况
         boolean flag = false;
@@ -155,7 +157,7 @@ public class WordFilter {
         }
 
         // 长度必须大于等于1，为词
-        if (matchFlag < 2 || !flag) {
+        if (matchFlag < MATCH_FLAG_LENGTH || !flag) {
             matchFlag = 0;
         }
         return matchFlag;
