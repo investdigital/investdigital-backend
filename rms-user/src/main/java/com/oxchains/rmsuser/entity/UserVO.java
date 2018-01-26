@@ -75,4 +75,14 @@ public class UserVO extends User {
         }
         return null;
     }
+
+    private String vcode;
+
+    public String getVcode() {
+        return vcode;
+    }
+
+    public void setVcode(String vcode) {
+        this.vcode = vcode;
+    }
 }

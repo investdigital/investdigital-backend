@@ -6,11 +6,17 @@ import com.oxchains.rmsuser.common.*;
 import com.oxchains.rmsuser.dao.UserRepo;
 import com.oxchains.rmsuser.entity.User;
 import com.oxchains.rmsuser.entity.UserVO;
+import com.oxchains.rmsuser.entity.VerifyCode;
+import com.sun.org.apache.regexp.internal.RE;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static com.google.common.collect.Lists.newArrayList;
 
@@ -51,6 +57,12 @@ public class UserService {
             if(!RegexUtils.match(userVO.getMobilephone(),RegexUtils.REGEX_MOBILEPHONE)){
                 return RestResp.fail("请正确填写手机号");
             }
+            // 手机验证码 验证
+            String vcodeVal = getVcodeFromRedis(userVO.getMobilephone());
+            if(null == vcodeVal || !vcodeVal.equals(userVO.getVcode())){
+                return RestResp.fail("手机验证码不正确");
+            }
+
         }
         if(null != userVO.getEmail()){
             if(!RegexUtils.match(userVO.getEmail(),RegexUtils.REGEX_EMAIL)){
@@ -78,6 +90,7 @@ public class UserService {
         if(null==userVO.getPassword() || "".equals(userVO.getPassword().trim())){
             return RestResp.fail("请正确填写登录密码");
         }
+
         userVO.setPassword(EncryptUtils.encodeSHA256(userVO.getPassword()));
         if(null == userVO.getCreateTime()){
             userVO.setCreateTime(DateUtil.getPresentDate());
@@ -350,24 +363,63 @@ public class UserService {
         }
     }
 
-    public RestResp addBitcoinAddress(String loginname,String firstAddress){
-        if(null == loginname || "".equals(loginname.trim())){
-            return RestResp.fail("用户名不正确");
-        }
-        if(null == firstAddress || "".equals(firstAddress.trim()) || firstAddress.length()<26 || firstAddress.length()>34){
-            return RestResp.fail("未正确填写收款地址,请重新填写");
-        }
-        firstAddress = firstAddress.trim();
-        User user = userRepo.findByLoginname(loginname);
-        if(null == user){
-            return RestResp.fail("用户名不正确");
-        }
-//        if(firstAddress.equals(user.getFirstAddress())){
-//            return RestResp.fail("您未修改地址");
-//        }
-//        user.setFirstAddress(firstAddress);
-        userRepo.save(user);
-        return RestResp.success("操作成功",firstAddress);
+    @Resource
+    private RedisTemplate redisTemplate;
 
+    public boolean saveVcode(String key, String vcode){
+        try {
+            ValueOperations<String, String> ops = redisTemplate.opsForValue();
+            ops.set(key, vcode, 5L, TimeUnit.MINUTES);
+            return true;
+        }catch (Exception e){
+            log.error("Redis 操作异常:" ,e);
+            return false;
+        }
+    }
+    public String getVcodeFromRedis(String key){
+        String val = null;
+        try{
+            boolean flag = redisTemplate.hasKey(key);
+            if(!flag){
+                return val;
+            }
+            ValueOperations<String,String> ops = redisTemplate.opsForValue();
+            val = ops.get(key);
+            redisTemplate.delete(key);
+            return val;
+        }catch (Exception e){
+            log.error("Redis 操作异常", e);
+            return null;
+        }
+    }
+
+    @Value("${rms.frontend.url}")
+    private String frontEndUrl;
+    public RestResp sendVmail(VerifyCode vcode){
+        if(null == vcode){
+            return RestResp.fail("参数不能为空");
+        }
+        if(null==vcode.getKey()||"".equals(vcode.getKey().trim()) || !vcode.getKey().contains("@")){
+            return RestResp.fail("输入的邮箱格式不正确");
+        }
+        if(null == vcode.getVcode() || "".equals(vcode.getKey().trim())){
+            return RestResp.fail("验证码不能为空");
+        }
+
+        String vcodeVal = getVcodeFromRedis(vcode.getKey());
+        if (vcodeVal.equals(vcode.getVcode())) {
+            String[] to = {vcode.getKey()};
+            String url = "http://"+frontEndUrl+"/resetpsw?email="+vcode.getKey()+"&vcode="+vcode.getVcode();
+            try {
+                //mailService.send(new Email(to,"修改密码","请点击以下链接进行密码修改操作：\n" +  url));
+                mailService.sendHtmlMail(vcode.getKey(),"修改密码","请点击以下链接进行密码修改操作：\n" +
+                        "<a href='"+url+"'>点击这里</a>");
+                return RestResp.success("邮件已发送到："+vcode.getKey()+"，请尽快修改您的密码",null);
+            }catch (Exception e){
+                log.error("邮件发送异常",e);
+                return RestResp.fail("邮件发送失败,请重新操作");
+            }
+        }
+        return RestResp.fail("验证码错误");
     }
 }

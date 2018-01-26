@@ -2,6 +2,7 @@ package com.oxchains.rmsuser.rest;
 
 
 import com.google.code.kaptcha.impl.DefaultKaptcha;
+import com.oxchains.rmsuser.common.RegexUtils;
 import com.oxchains.rmsuser.common.RestResp;
 import com.oxchains.rmsuser.entity.User;
 import com.oxchains.rmsuser.entity.UserVO;
@@ -62,7 +63,7 @@ public class UserController {
      * 图片验证码
      */
     @RequestMapping(value = "/imgVcode")
-    public void defaultKaptcha(VerifyCode vcode, HttpServletRequest request, HttpServletResponse response) throws Exception{
+    public void defaultKaptcha(VerifyCode vcode,HttpServletRequest request, HttpServletResponse response) throws Exception{
         if(null == vcode || vcode.getKey()==null || "".equals(vcode.getKey().trim())){
             response.sendError(HttpServletResponse.SC_BAD_REQUEST);
             return;
@@ -72,7 +73,9 @@ public class UserController {
         try {
             //生产验证码字符串并保存到session中
             String createText = defaultKaptcha.createText();
-
+            if(!userService.saveVcode(vcode.getKey(),createText)){
+                request.getSession().setAttribute(vcode.getKey(), createText);
+            }
             //使用生产的验证码字符串返回一个BufferedImage对象并转为byte写入到byte数组中
             BufferedImage challenge = defaultKaptcha.createImage(createText);
             ImageIO.write(challenge, "jpg", jpegOutputStream);
@@ -94,6 +97,76 @@ public class UserController {
         responseOutputStream.close();
     }
 
+    /**
+     *
+     */
+    @PostMapping(value = "/phoneVcode")
+    public RestResp phoneVcode(@RequestBody UserVO vo/*String loginname, String mobilephone*/,HttpServletRequest request) throws Exception{
+        String mobilephone = vo.getMobilephone();
+        if(null == mobilephone || "".equals(mobilephone.trim())){
+            return RestResp.fail("手机号不能为空");
+        }
+        if(!RegexUtils.match(mobilephone,RegexUtils.REGEX_MOBILEPHONE)){
+            return RestResp.fail("请输入正确的手机号");
+        }
+        try {
+            //生产验证码字符串并保存到session中
+            String createText = defaultKaptcha.createText();
+            if(!userService.saveVcode(mobilephone,createText)){
+                request.getSession().setAttribute(mobilephone, createText);
+            }
+            //手机发送
+            //TODO
+            System.out.println("********手机验证码********:"+createText);
+            return RestResp.success(createText);
+        } catch (IllegalArgumentException e) {
+            return RestResp.fail("404");
+        }
+    }
 
+    /**
+     * 验证验证码
+     */
+    @RequestMapping("/verifyCode")
+    public RestResp verifytKaptchaCode(VerifyCode vcode, HttpServletRequest request, HttpServletResponse response){
+        if(null == vcode || null == vcode.getKey() || null == vcode.getVcode() || "".equals(vcode.getKey().trim()) || "".equals(vcode.getVcode().trim())){
+            return RestResp.fail("参数不能为空");
+        }
+        String vcodeVal = userService.getVcodeFromRedis(vcode.getKey());
+//        String captchaId = (String) request.getSession().getAttribute("vcode");
+//        String parameter = request.getParameter("vcode");
+
+        if (vcodeVal.equals(vcode.getVcode())) {
+            return RestResp.success("验证码正确");
+        }
+        return RestResp.fail("验证码错误");
+    }
+
+    /**
+     * 发送邮件
+     * @return
+     */
+    @RequestMapping(value = "/sendVmail")
+    public RestResp sendVerifyMail(VerifyCode vcode){
+        return userService.sendVmail(vcode);
+    }
+
+    /**
+     * 重置密码
+     */
+    @PostMapping(value = "/resetpwd")
+    public RestResp resetpwd(String resetkey,String password){
+        return userService.resetpwd(resetkey,password);
+    }
+
+    @GetMapping(value = "/active")
+    public RestResp activeUser(String email){
+        return userService.active(email);
+    }
+
+    @PostMapping(value = "/mail")
+    public RestResp sendMail(String email, String subject,String content){
+        return userService.sendMail(email,subject,content);
+    }
 
 }
