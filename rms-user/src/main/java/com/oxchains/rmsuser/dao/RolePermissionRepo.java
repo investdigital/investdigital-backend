@@ -22,4 +22,6 @@ public interface RolePermissionRepo extends CrudRepository<RolePermission,Long> 
 
     @Query(" SELECT rp FROM RolePermission as rp WHERE rp.roleId IN(SELECT roleId FROM UserRole as ur WHERE ur.userId=?1) ")
     List<RolePermission> queryRolePermissionByUserId(@Param("userId") Long userId);
+
+    int countByRoleId(Long roleId);
 }

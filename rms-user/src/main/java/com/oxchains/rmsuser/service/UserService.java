@@ -44,6 +44,9 @@ public class UserService {
     @Resource
     MailService mailService;
 
+    @Resource
+    private KaptchaService kaptchaService;
+
 
     public RestResp addUser(UserVO userVO) {
         boolean mail = false;
@@ -102,13 +105,17 @@ public class UserService {
         }
 
         if(mail){
+            String kaptcha = kaptchaService.createText();
+            saveVcode(user.getEmail(),kaptcha);
             String url = "http://"+"----------"+"/islive?email="+user.getEmail();
+            url = "http://192.168.1.111:8081/oxchains/user/vunlock?email="+user.getEmail()+"&vcode="+kaptcha;
             try {
                 mailService.sendHtmlMail(user.getEmail(),"账号激活","请点击以下链接进行账号激活操作：\n" +
                         "<a href='"+url+"'>点击这里</a>");
                 return RestResp.success("注册成功，验证信息已经发送到邮箱："+user.getEmail()+"中，请前往操作",null);
             }catch (Exception e){
                 log.error("邮件发送异常",e);
+                userRepo.delete(user.getId());
                 return RestResp.fail("邮件发送失败,请重新操作");
             }
         }else {
@@ -422,4 +429,135 @@ public class UserService {
         }
         return RestResp.fail("验证码错误");
     }
+
+    public RestResp verifyEmail(VerifyCode verifyCode){
+        String key = verifyCode.getKey();
+        String code = verifyCode.getVcode();
+
+        String kaptcha = getVcodeFromRedis(key);
+        if(kaptcha.equals(key)){
+            User user = userRepo.findByEmail(key);
+            user.setEnabled(Status.EnableStatus.ENABLED.getStatus());
+            userRepo.save(user);
+            return RestResp.success("验证成功");
+        }else {
+            return RestResp.fail("验证失败,请重新获取验证码");
+        }
+    }
+
+
+    /**
+     * 后台添加用户
+     */
+    public RestResp backAddUser(UserVO userVO) {
+        if(null == userVO){
+            return RestResp.fail("请正确提交的注册信息");
+        }
+        if(null == userVO.getLoginname() || !RegexUtils.match(userVO.getLoginname(),RegexUtils.REGEX_NAME_LEN32)){
+            return RestResp.fail("请正确填写登录名，只能包含字母、数字、下划线，且只能以字母开头");
+        }
+        if(null != userVO.getMobilephone()){
+            if(!RegexUtils.match(userVO.getMobilephone(),RegexUtils.REGEX_MOBILEPHONE)){
+                return RestResp.fail("请正确填写手机号");
+            }
+        }
+        if(null != userVO.getEmail()){
+            if(!RegexUtils.match(userVO.getEmail(),RegexUtils.REGEX_EMAIL)){
+                return RestResp.fail("请正确填写邮箱地址");
+            }
+            userVO.setEnabled(Status.EnableStatus.UNENABLED.getStatus());
+        }else {
+            userVO.setEnabled(Status.EnableStatus.ENABLED.getStatus());
+        }
+        Optional<User> optional = getUser(userVO);
+        if (optional.isPresent()) {
+            User u = optional.get();
+            if(null != userVO.getLoginname() && userVO.getLoginname().equals(u.getLoginname())){
+                return RestResp.fail("用户名已经存在");
+            }
+            if(null != userVO.getMobilephone() && userVO.getMobilephone().equals(u.getMobilephone())){
+                return RestResp.fail("该手机号已被注册");
+            }
+            if(null != userVO.getEmail() && userVO.getEmail().equals(u.getEmail())){
+                return RestResp.fail("该邮箱已被注册");
+            }
+            return RestResp.fail("注册用户已经存在");
+        }
+        if(null==userVO.getPassword() || "".equals(userVO.getPassword().trim())){
+            return RestResp.fail("请正确填写登录密码");
+        }
+
+        userVO.setPassword(EncryptUtils.encodeSHA256(userVO.getPassword()));
+        if(null == userVO.getCreateTime()){
+            userVO.setCreateTime(DateUtil.getPresentDate());
+        }
+
+        User user = userRepo.save(userVO.userVO2User());
+        if (user == null) {
+            return RestResp.fail("操作失败");
+        }
+        return RestResp.success("添加成功",user);
+    }
+
+
+    public RestResp lockUser(UserVO vo){
+        Optional<User> optional = getUser(vo);
+        return optional.map(u -> {
+            if(u.getEnabled().equals(Status.EnableStatus.UNENABLED.getStatus())){
+                return RestResp.success("账号已经锁定");
+            }
+            u.setEnabled(Status.EnableStatus.UNENABLED.getStatus());
+            u = userRepo.save(u);
+            UserVO userInfo = new UserVO(u);
+            userInfo.setPassword(null);
+
+            return RestResp.success("账号已经锁定", userInfo);
+        }).orElse(RestResp.fail("账号不存在"));
+    }
+
+    public RestResp unlockUser(UserVO vo){
+        Optional<User> optional = getUser(vo);
+        return optional.map(u -> {
+            if(u.getEnabled().equals(Status.EnableStatus.UNENABLED.getStatus())){
+                u.setEnabled(Status.EnableStatus.ENABLED.getStatus());
+                u = userRepo.save(u);
+                UserVO userInfo = new UserVO(u);
+                userInfo.setPassword(null);
+                return RestResp.success("账号已经解锁", userInfo);
+            }
+            return RestResp.success("账号已经解锁");
+
+        }).orElse(RestResp.fail("账号不存在"));
+    }
+
+    public RestResp vunlockUser(UserVO vo){
+        String vcode = null;
+        if(null != vo.getMobilephone()){
+            vcode = getVcodeFromRedis(vo.getMobilephone());
+        }
+        if(null != vo.getEmail()){
+            vcode = getVcodeFromRedis(vo.getEmail());
+        }
+        if(vcode==null || !vcode.equals(vo.getVcode())){
+            return RestResp.fail("解锁失败");
+        }
+        return unlockUser(vo);
+    }
+
+
+    public RestResp getCaptcha(UserVO vo){
+      String captcha = kaptchaService.createText();
+      if(null != vo.getMobilephone()){
+          // TODO
+          saveVcode(vo.getMobilephone(), captcha);
+          return RestResp.success("验证码已经发送到手机："+vo.getMobilephone()+"，请尽快激活账号",null);
+      }
+      if(null != vo.getEmail()){
+          mailService.sendHtmlMail(vo.getEmail(),"验证码","账号激活验证码：" + captcha);
+          saveVcode(vo.getEmail(), captcha);
+          return RestResp.success("验证码已经发送到邮箱："+vo.getEmail()+"，请尽快激活账号",null);
+      }
+      return RestResp.fail();
+    }
+
 }

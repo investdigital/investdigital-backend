@@ -7,6 +7,7 @@ import com.oxchains.rmsuser.common.RestResp;
 import com.oxchains.rmsuser.entity.User;
 import com.oxchains.rmsuser.entity.UserVO;
 import com.oxchains.rmsuser.entity.VerifyCode;
+import com.oxchains.rmsuser.service.KaptchaService;
 import com.oxchains.rmsuser.service.UserService;
 import org.springframework.web.bind.annotation.*;
 
@@ -29,6 +30,8 @@ import java.io.ByteArrayOutputStream;
 public class UserController {
     @Resource
     UserService userService;
+    @Resource
+    KaptchaService kaptchaService;
 
     @GetMapping(value = "/list")
     public RestResp list(){
@@ -45,7 +48,6 @@ public class UserController {
         return userService.login(user);
     }
 
-
     @PostMapping(value = "/logout")
     public RestResp logout(@RequestBody User user){
         return userService.logout(user);
@@ -55,9 +57,6 @@ public class UserController {
     public RestResp vatar(@ModelAttribute User user) throws Exception{
         return userService.avatar(user);
     }
-
-    @Resource
-    DefaultKaptcha defaultKaptcha;
 
     /**
      * 图片验证码
@@ -72,12 +71,12 @@ public class UserController {
         ByteArrayOutputStream jpegOutputStream = new ByteArrayOutputStream();
         try {
             //生产验证码字符串并保存到session中
-            String createText = defaultKaptcha.createText();
+            String createText = kaptchaService.createText();
             if(!userService.saveVcode(vcode.getKey(),createText)){
                 request.getSession().setAttribute(vcode.getKey(), createText);
             }
             //使用生产的验证码字符串返回一个BufferedImage对象并转为byte写入到byte数组中
-            BufferedImage challenge = defaultKaptcha.createImage(createText);
+            BufferedImage challenge = kaptchaService.createImage(createText);
             ImageIO.write(challenge, "jpg", jpegOutputStream);
         } catch (IllegalArgumentException e) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
@@ -101,7 +100,7 @@ public class UserController {
      *
      */
     @PostMapping(value = "/phoneVcode")
-    public RestResp phoneVcode(@RequestBody UserVO vo/*String loginname, String mobilephone*/,HttpServletRequest request) throws Exception{
+    public RestResp phoneVcode(UserVO vo/*String loginname, String mobilephone*/,HttpServletRequest request) throws Exception{
         String mobilephone = vo.getMobilephone();
         if(null == mobilephone || "".equals(mobilephone.trim())){
             return RestResp.fail("手机号不能为空");
@@ -111,7 +110,7 @@ public class UserController {
         }
         try {
             //生产验证码字符串并保存到session中
-            String createText = defaultKaptcha.createText();
+            String createText = kaptchaService.createText();
             if(!userService.saveVcode(mobilephone,createText)){
                 request.getSession().setAttribute(mobilephone, createText);
             }
@@ -137,9 +136,9 @@ public class UserController {
 //        String parameter = request.getParameter("vcode");
 
         if (vcodeVal.equals(vcode.getVcode())) {
-            return RestResp.success("验证码正确");
+            return RestResp.success("验证成功");
         }
-        return RestResp.fail("验证码错误");
+        return RestResp.fail("验证失败");
     }
 
     /**
@@ -151,6 +150,10 @@ public class UserController {
         return userService.sendVmail(vcode);
     }
 
+    @RequestMapping(value = "/verifyEmail")
+    public RestResp verifyEmainl(VerifyCode vcode){
+        return userService.verifyEmail(vcode);
+    }
     /**
      * 重置密码
      */
@@ -169,4 +172,36 @@ public class UserController {
         return userService.sendMail(email,subject,content);
     }
 
+    @PostMapping(value = "/add")
+    public RestResp addUser(@RequestBody UserVO user){
+        return userService.backAddUser(user);
+    }
+
+    @PostMapping(value = "/lock")
+    public RestResp lockUser(@RequestBody UserVO user){
+        return userService.lockUser(user);
+    }
+
+    @PostMapping(value = "/unlock")
+    public RestResp unlockUser(@RequestBody UserVO user){
+        return userService.unlockUser(user);
+    }
+
+
+
+    /**
+     * 邮箱/手机获取激活验证码
+     */
+    @PostMapping(value = "/captcha")
+    public RestResp getCaptcha(@RequestBody UserVO user){
+        return userService.getCaptcha(user);
+    }
+
+    /**
+     *  邮箱/手机激活账号
+     */
+    @RequestMapping(value = "/vunlock")
+    public RestResp vunlockUser(UserVO user){
+        return userService.vunlockUser(user);
+    }
 }

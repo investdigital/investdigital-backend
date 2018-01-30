@@ -17,4 +17,7 @@ import java.util.List;
 public interface UserRoleRepo extends CrudRepository<UserRole,Long> {
 
     List<UserRole> findByUserId(Long userId);
+    List<UserRole> findByRoleId(Long roleId);
+
+    int countByRoleId(Long roleId);
 }

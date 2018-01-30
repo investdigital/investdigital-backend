@@ -17,12 +17,16 @@ public class Role {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    private String name;
+    @Column(length = 32)
+    private String roleName;
+    @Column(length = 32)
+    private String roleSign;
+    @Column(length = 128)
     private String description;
 
-    public Role(String name, String description) {
-        this.name = name;
-        this.description = description;
+    public Role(String roleName, String roleSign) {
+        this.roleName = roleName;
+        this.roleSign = roleSign;
     }
 
     public Role() {
