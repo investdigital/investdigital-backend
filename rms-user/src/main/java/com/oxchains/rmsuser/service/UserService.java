@@ -10,11 +10,16 @@ import com.oxchains.rmsuser.entity.VerifyCode;
 import com.sun.org.apache.regexp.internal.RE;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -274,6 +279,12 @@ public class UserService {
 
     public Optional<User> getUser(User user){
         User u = null;
+        if(null != user.getId()){
+            u = userRepo.findOne(user.getId());
+            if (null != u) {
+                return  Optional.of(u);
+            }
+        }
         if (null != user.getLoginname()) {
             u = userRepo.findByLoginname(user.getLoginname());
             if (null != u) {
@@ -445,6 +456,27 @@ public class UserService {
         }
     }
 
+    public RestResp list(String loginname,Integer pageNo,Integer pageSize){
+        pageNo = pageNo == null?1:pageNo;
+        pageSize = pageSize == null ?10 :pageSize;
+        Pageable pager = new PageRequest((pageNo-1)*pageSize, pageSize);
+        try{
+            Page<User> page = null;
+            if(null != loginname && !"".equals(loginname.trim())){
+                page = userRepo.findByLoginname(loginname,pager);
+            }else {
+                page = userRepo.findAll(pager);
+            }
+            List<UserVO> list = new ArrayList<>(page.getContent().size());
+            for(User user:page.getContent()){
+                list.add(new UserVO(user));
+            }
+            return RestRespPage.success(list,page.getTotalElements());
+        }catch (Exception e){
+            log.error("",e);
+            return RestResp.fail();
+        }
+    }
 
     /**
      * 后台添加用户
@@ -500,11 +532,19 @@ public class UserService {
     }
 
 
+    public RestResp deleteUser(UserVO userVO){
+        Optional<User> optional = getUser(userVO);
+        return optional.map(u -> {
+            userRepo.delete(u);
+            return RestResp.success("删除账号成功");
+        }).orElse(RestResp.fail("账号不存在"));
+    }
+
     public RestResp lockUser(UserVO vo){
         Optional<User> optional = getUser(vo);
         return optional.map(u -> {
             if(u.getEnabled().equals(Status.EnableStatus.UNENABLED.getStatus())){
-                return RestResp.success("账号已经锁定");
+                return RestResp.success("账号已被锁定");
             }
             u.setEnabled(Status.EnableStatus.UNENABLED.getStatus());
             u = userRepo.save(u);

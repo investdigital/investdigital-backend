@@ -18,6 +18,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.util.Map;
 
 /**
  * @author ccl
@@ -33,10 +34,10 @@ public class UserController {
     @Resource
     KaptchaService kaptchaService;
 
-    @GetMapping(value = "/list")
+/*    @GetMapping(value = "/list")
     public RestResp list(){
         return userService.findUsers();
-    }
+    }*/
 
     @PostMapping(value = "/signup")
     public RestResp register(@RequestBody UserVO user){
@@ -172,22 +173,6 @@ public class UserController {
         return userService.sendMail(email,subject,content);
     }
 
-    @PostMapping(value = "/add")
-    public RestResp addUser(@RequestBody UserVO user){
-        return userService.backAddUser(user);
-    }
-
-    @PostMapping(value = "/lock")
-    public RestResp lockUser(@RequestBody UserVO user){
-        return userService.lockUser(user);
-    }
-
-    @PostMapping(value = "/unlock")
-    public RestResp unlockUser(@RequestBody UserVO user){
-        return userService.unlockUser(user);
-    }
-
-
 
     /**
      * 邮箱/手机获取激活验证码
@@ -204,4 +189,30 @@ public class UserController {
     public RestResp vunlockUser(UserVO user){
         return userService.vunlockUser(user);
     }
+
+    @GetMapping(value = "/list")
+    public RestResp list(String loginname,Integer pageNo, Integer pageSize){
+        return userService.list(loginname,pageNo,pageSize);
+    }
+
+    @PostMapping(value = "/add")
+    public RestResp addUser(@RequestBody UserVO user){
+            return userService.backAddUser(user);
+    }
+
+    @PostMapping(value = "/delete")
+    public RestResp deleteUser(@RequestBody UserVO user){
+        return userService.deleteUser(user);
+    }
+
+    @PostMapping(value = "/lock")
+    public RestResp lockUser(@RequestBody UserVO user){
+        return userService.lockUser(user);
+    }
+
+    @PostMapping(value = "/unlock")
+    public RestResp unlockUser(@RequestBody UserVO user){
+        return userService.unlockUser(user);
+    }
+
 }

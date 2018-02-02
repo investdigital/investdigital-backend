@@ -53,6 +53,9 @@ public class RoleService {
     }
 
     public RestResp addRole(Role role){
+        if(null == role || null == role.getRoleName() || "".equals(role.getRoleName().trim())){
+            return RestResp.fail("角色名称不能为空");
+        }
         try{
             Role r = getRole(role);
             if(null != r){
@@ -77,6 +80,9 @@ public class RoleService {
     }
 
     public RestResp deleteRole(Role role){
+        if(null == role || role.getId()==null){
+            return RestResp.fail("操作有误");
+        }
         try{
             int n = 0;
             n = userRoleRepo.countByRoleId(role.getId());

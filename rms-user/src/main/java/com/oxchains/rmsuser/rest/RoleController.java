@@ -1,6 +1,7 @@
 package com.oxchains.rmsuser.rest;
 
 import com.oxchains.rmsuser.common.RestResp;
+import com.oxchains.rmsuser.common.RestRespPage;
 import com.oxchains.rmsuser.entity.Role;
 import com.oxchains.rmsuser.service.RoleService;
 import org.springframework.web.bind.annotation.*;
@@ -25,7 +26,7 @@ public class RoleController {
     }
 
     @PostMapping(value = "/add")
-    public RestResp add(Role role){
+    public RestResp add(@RequestBody Role role){
         return roleService.addRole(role);
     }
 
@@ -34,8 +35,8 @@ public class RoleController {
         return roleService.updateRole(role);
     }
 
-    @DeleteMapping(value = "/delete")
-    public RestResp delete(Role role){
+    @PostMapping(value = "/delete")
+    public RestResp delete(@RequestBody Role role){
         return roleService.deleteRole(role);
     }
 }

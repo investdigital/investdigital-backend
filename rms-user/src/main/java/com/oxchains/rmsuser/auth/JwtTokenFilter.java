@@ -2,6 +2,7 @@ package com.oxchains.rmsuser.auth;
 
 import com.oxchains.rmsuser.common.IndexUtils;
 import com.oxchains.rmsuser.entity.User;
+import lombok.extern.slf4j.Slf4j;
 import org.omg.PortableServer.SERVANT_RETENTION_POLICY_ID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +18,7 @@ import java.util.Set;
 /**
  * @author aiet
  */
+@Slf4j
 @Component
 public class JwtTokenFilter implements Filter {
 private Logger LOG = LoggerFactory.getLogger(this.getClass());
@@ -38,8 +40,10 @@ private Logger LOG = LoggerFactory.getLogger(this.getClass());
         String uri = servletRequest.getRequestURI();
         int index = IndexUtils.getIndex(uri, "/");
         String subUri = uri.substring(0, index);
-        System.out.println("sub uri="+subUri);
-        System.out.println("auth-token=" + authorization);
+        log.info("sub uri="+subUri);
+        log.info("auth-token=" + authorization);
+        String method = ((HttpServletRequest) request).getMethod();
+        log.info("HTTP REQUEST METHOD: " + method);
         if (authorization != null && authorization.startsWith(AuthorizationConst.AUTHORIZATION_START)) {
             jwtService
                     .parse(authorization.replaceAll(AuthorizationConst.AUTHORIZATION_START, ""), uri)
@@ -51,11 +55,11 @@ private Logger LOG = LoggerFactory.getLogger(this.getClass());
                                     .getContext()
                                     .setAuthentication(jwtAuthentication);
                         }else{
-                            try {
-                                response.getOutputStream().print("error");
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
+//                            try {
+//                                response.getOutputStream().print("error");
+//                            } catch (IOException e) {
+//                                e.printStackTrace();
+//                            }
                         }
                     });
         }
