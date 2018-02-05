@@ -169,14 +169,37 @@ public class PermissionService {
         return RestResp.fail("操作失败");
     }
 
-    public RestResp deleteAuthUser(Long permissionId, Long toId){
+    public RestResp deleteAuthUser(Long permissionId, Long userId){
         try {
-            UserPermission userPermission = userPermissionRepo.findByUserIdAndPermissionId(toId, permissionId);
+            UserPermission userPermission = userPermissionRepo.findByUserIdAndPermissionId(userId, permissionId);
             if (userPermission != null){
                 userPermissionRepo.delete(userPermission.getId());
                 return RestResp.success("操作成功", userPermission);
             }
             return RestResp.fail("权限不存在");
+        } catch (Exception e){
+            LOG.error("delete user permission failed: {}", e.getMessage(), e);
+        }
+        return RestResp.fail("操作失败");
+    }
+
+    public RestResp deleteAuthRole(Long roleId,String permissionIds){
+        if(null ==permissionIds || "".equals(permissionIds.trim())){
+            return RestResp.fail("请选择需要移除的权限");
+        }
+        String[] ids = permissionIds.split(",");
+        try {
+            List<RolePermission> rolePermissions = rolePermissionRepo.findByRoleId(roleId);
+
+            for(RolePermission rolePermission : rolePermissions){
+                for(String id: ids){
+                    Long iD = Long.valueOf(id);
+                    if(iD.equals(rolePermission.getId())){
+                        rolePermissionRepo.delete(rolePermission.getId());
+                    }
+                }
+            }
+            return RestResp.success("操作成功", null);
         } catch (Exception e){
             LOG.error("delete user permission failed: {}", e.getMessage(), e);
         }

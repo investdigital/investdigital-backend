@@ -42,18 +42,23 @@ public class PermissionController {
         return permissionService.userQueryUri(userId);
     }
 
-    @GetMapping("/authUri/{permissionId}/{toId}")
-    public RestResp authURI(@PathVariable Long permissionId, @PathVariable Long toId){
-        return permissionService.authURI(permissionId, toId);
+    @GetMapping("/authUri/{permissionId}/{roleId}")
+    public RestResp authURI(@PathVariable Long permissionId, @PathVariable Long roleId){
+        return permissionService.authURI(permissionId, roleId);
     }
 
-    @GetMapping("/authUser/{permissionId}/{toId}")
-    public RestResp authUser(@PathVariable Long permissionId, @PathVariable Long toId){
-        return permissionService.authUser(permissionId, toId);
+    @GetMapping("/authUser/{permissionId}/{userId}")
+    public RestResp authUser(@PathVariable Long permissionId, @PathVariable Long userId){
+        return permissionService.authUser(permissionId, userId);
     }
 
-    @GetMapping("/deleteAuthUser/{permissionId}/{toId}")
-    public RestResp deleteAuthUser(@PathVariable Long permissionId, @PathVariable Long toId){
-        return permissionService.deleteAuthUser(permissionId, toId);
+    @GetMapping("/deleteAuthUser/{userId}/{permissionId}")
+    public RestResp deleteAuthUser(@PathVariable Long userId, @PathVariable Long permissionId){
+        return permissionService.deleteAuthUser(permissionId, userId);
+    }
+
+    @GetMapping("/deleteAuthRole/{roleId}/{permissionIds}")
+    public RestResp deleteAuthRole(@PathVariable Long roleId,@PathVariable String permissionIds){
+        return permissionService.deleteAuthRole(roleId,permissionIds);
     }
 }

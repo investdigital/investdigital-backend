@@ -19,5 +19,6 @@ public interface UserRoleRepo extends CrudRepository<UserRole,Long> {
     List<UserRole> findByUserId(Long userId);
     List<UserRole> findByRoleId(Long roleId);
 
+    int countByUserId(Long userId);
     int countByRoleId(Long roleId);
 }
