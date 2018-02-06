@@ -4,7 +4,9 @@ package com.oxchains.rmsuser.service;
 import com.oxchains.rmsuser.auth.JwtService;
 import com.oxchains.rmsuser.common.*;
 import com.oxchains.rmsuser.dao.UserRepo;
+import com.oxchains.rmsuser.dao.UserResourceRepo;
 import com.oxchains.rmsuser.entity.User;
+import com.oxchains.rmsuser.entity.UserResource;
 import com.oxchains.rmsuser.entity.UserVO;
 import com.oxchains.rmsuser.entity.VerifyCode;
 import com.sun.org.apache.regexp.internal.RE;
@@ -18,6 +20,7 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import javax.transaction.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -51,6 +54,9 @@ public class UserService {
 
     @Resource
     private KaptchaService kaptchaService;
+
+    @Resource
+    private UserResourceRepo userResourceRepo;
 
 
     public RestResp addUser(UserVO userVO) {
@@ -598,6 +604,108 @@ public class UserService {
           return RestResp.success("验证码已经发送到邮箱："+vo.getEmail()+"，请尽快激活账号",null);
       }
       return RestResp.fail();
+    }
+
+    @Transactional
+    public RestResp auth(Long roleId, String resourceIds){
+        if(null == roleId){
+            return RestResp.fail("分配权限失败");
+        }
+        try{
+            if(null == resourceIds || "".equals(resourceIds.trim())){
+                userResourceRepo.deleteByUserId(roleId);
+                return RestResp.success("取消成功");
+            }
+
+            List<Long> ids = NumberFormatUtil.stringSplit2Long(resourceIds,",");
+            List<UserResource> roleResources = userResourceRepo.findByUserId(roleId);
+
+            List<UserResource> auths = new ArrayList<>(ids.size());
+            for(Long id : ids){
+                for(UserResource roleResource : roleResources){
+                    if(id.equals(roleResource.getId())){
+                        auths.add(roleResource);
+
+                        ids.remove(id);
+                        roleResources.remove(roleResource);
+                        break;
+                    }
+                }
+            }
+
+            if(roleResources.size() > 0){
+                userResourceRepo.delete(roleResources);
+            }
+
+            if(ids.size() > 0){
+                for(Long id : ids){
+                    auths.add(new UserResource(roleId,id));
+                }
+            }
+
+            Iterable<UserResource> it = userResourceRepo.save(auths);
+
+            return RestResp.success("分配权限成功");
+        }catch (Exception e){
+            return RestResp.fail("分配权限失败");
+        }
+    }
+
+    @Transactional
+    public RestResp auth2(Long userId, String resourceIds){
+        if(null == userId){
+            return RestResp.fail("分配权限失败");
+        }
+        try{
+            if(null == resourceIds || "".equals(resourceIds.trim())){
+                userResourceRepo.deleteByUserId(userId);
+                return RestResp.success("取消成功");
+            }
+
+            List<Long> ids = NumberFormatUtil.stringSplit2Long(resourceIds,",");
+            List<UserResource> roleResources = userResourceRepo.findByUserId(userId);
+
+            List<UserResource> auths = new ArrayList<>(ids.size());
+            for(Long id : ids){
+                for(UserResource roleResource : roleResources){
+                    if(id.equals(roleResource.getId())){
+                        ids.remove(id);
+                        break;
+                    }
+                }
+            }
+
+
+            if(ids.size() > 0){
+                for(Long id : ids){
+                    auths.add(new UserResource(userId,id));
+                }
+            }else {
+                return RestResp.fail("用户已有该权限");
+            }
+
+            Iterable<UserResource> it = userResourceRepo.save(auths);
+
+            return RestResp.success("分配权限成功");
+        }catch (Exception e){
+            return RestResp.fail("分配权限失败");
+        }
+    }
+
+
+    @Transactional
+    public RestResp unauth(Long roleId, String resourceIds){
+        if(null == roleId || null == resourceIds || "".equals(resourceIds.trim())){
+            return RestResp.fail("取消权限失败");
+        }
+        try{
+            List<Long> ids = NumberFormatUtil.stringSplit2Long(resourceIds,",");
+            userResourceRepo.deleteByUserIdAndResourceIdIn(roleId,ids);
+
+            return RestResp.success("取消权限成功");
+        }catch (Exception e){
+            return RestResp.fail("取消权限失败");
+        }
     }
 
 }

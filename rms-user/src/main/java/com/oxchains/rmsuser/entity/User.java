@@ -1,6 +1,7 @@
 package com.oxchains.rmsuser.entity;
 
 import javax.persistence.*;
+import javax.transaction.Transactional;
 import java.util.Set;
 
 /**
@@ -156,5 +157,16 @@ public class User {
 
         setImage(user.getImage());
         setDescription(user.getDescription());
+    }
+
+    @Transient
+    private Set<String> authorities;
+
+    public Set<String> getAuthorities() {
+        return authorities;
+    }
+
+    public void setAuthorities(Set<String> authorities) {
+        this.authorities = authorities;
     }
 }

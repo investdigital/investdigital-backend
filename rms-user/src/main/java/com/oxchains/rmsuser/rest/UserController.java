@@ -215,4 +215,15 @@ public class UserController {
         return userService.unlockUser(user);
     }
 
+
+    /********************************************/
+    @PostMapping(value = "/authu/{userId}")
+    public RestResp auth(@PathVariable Long userId,String resourceIds){
+        return userService.auth(userId,resourceIds);
+    }
+
+    @PostMapping(value = "/unauthu/{roleId}")
+    public RestResp unauth(@PathVariable Long userId,String resourceIds){
+        return userService.unauth(userId,resourceIds);
+    }
 }

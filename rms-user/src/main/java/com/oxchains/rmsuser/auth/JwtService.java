@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.oxchains.rmsuser.common.IndexUtils;
 import com.oxchains.rmsuser.dao.*;
 import com.oxchains.rmsuser.entity.*;
+import com.oxchains.rmsuser.service.ResourceService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.SignatureAlgorithm;
@@ -60,6 +61,9 @@ public class JwtService {
     @Resource private UserPermissionRepo userPermissionRepo;
 
     private final UserRepo userRepo;
+
+    @Resource
+    private ResourceService resourceService;
 
     public JwtService(UserRepo userRepo) {
         this.userRepo = userRepo;
@@ -122,6 +126,16 @@ public class JwtService {
                     urlSet.add(permission.getUrl());
                 }
             });
+
+            /*
+            *  authorities
+            * */
+
+            List<com.oxchains.rmsuser.entity.Resource> resources = resourceService.getUserResources(user.getId());
+            resources.stream().forEach(resource -> {
+                urlSet.add(resource.getResourceUrl());
+            });
+
             user.setPermissionUriSet(urlSet);
             JwtAuthentication jwtAuthentication = new JwtAuthentication(user, token, claims);
             return Optional.of(jwtAuthentication);

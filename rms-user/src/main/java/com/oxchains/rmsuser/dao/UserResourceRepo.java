@@ -18,4 +18,7 @@ import java.util.List;
 @Repository
 public interface UserResourceRepo extends CrudRepository<UserResource,Long> {
     List<UserResource> findByUserId(Long userId);
+
+    int deleteByUserId(Long userId);
+    int deleteByUserIdAndResourceIdIn(Long userId,List<Long> resourceIds);
 }
