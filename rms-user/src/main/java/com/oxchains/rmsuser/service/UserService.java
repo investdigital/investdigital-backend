@@ -1,6 +1,8 @@
 package com.oxchains.rmsuser.service;
 
 
+import com.alibaba.fastjson.JSON;
+import com.alibaba.fastjson.JSONObject;
 import com.oxchains.rmsuser.auth.JwtService;
 import com.oxchains.rmsuser.common.*;
 import com.oxchains.rmsuser.dao.UserRepo;
@@ -653,13 +655,13 @@ public class UserService {
 
     @Transactional
     public RestResp auth2(Long userId, String resourceIds){
+        resourceIds = JSONObject.parseObject(resourceIds).get("resourceIds").toString();
         if(null == userId){
             return RestResp.fail("分配权限失败");
         }
         try{
             if(null == resourceIds || "".equals(resourceIds.trim())){
-                userResourceRepo.deleteByUserId(userId);
-                return RestResp.success("取消成功");
+                return RestResp.fail("请选择移除的权限");
             }
 
             List<Long> ids = NumberFormatUtil.stringSplit2Long(resourceIds,",");
@@ -695,6 +697,7 @@ public class UserService {
 
     @Transactional
     public RestResp unauth(Long roleId, String resourceIds){
+        resourceIds = JSONObject.parseObject(resourceIds).get("resourceIds").toString();
         if(null == roleId || null == resourceIds || "".equals(resourceIds.trim())){
             return RestResp.fail("取消权限失败");
         }

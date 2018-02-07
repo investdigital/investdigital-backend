@@ -41,12 +41,12 @@ public class RoleController {
     }
 
     @PostMapping(value = "/authr/{roleId}")
-    public RestResp auth(@PathVariable Long roleId,String resourceIds){
-        return roleService.auth(roleId,resourceIds);
+    public RestResp auth(@PathVariable Long roleId,@RequestBody String resourceIds){
+        return roleService.auth2(roleId,resourceIds);
     }
 
     @PostMapping(value = "/unauthr/{roleId}")
-    public RestResp unauth(@PathVariable Long roleId,String resourceIds){
+    public RestResp unauth(@PathVariable Long roleId,@RequestBody String resourceIds){
         return roleService.unauth(roleId,resourceIds);
     }
 }

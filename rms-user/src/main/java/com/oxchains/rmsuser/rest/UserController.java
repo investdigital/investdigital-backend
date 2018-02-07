@@ -218,12 +218,12 @@ public class UserController {
 
     /********************************************/
     @PostMapping(value = "/authu/{userId}")
-    public RestResp auth(@PathVariable Long userId,String resourceIds){
-        return userService.auth(userId,resourceIds);
+    public RestResp auth(@PathVariable Long userId,@RequestBody String resourceIds){
+        return userService.auth2(userId,resourceIds);
     }
 
-    @PostMapping(value = "/unauthu/{roleId}")
-    public RestResp unauth(@PathVariable Long userId,String resourceIds){
+    @PostMapping(value = "/unauthu/{userId}")
+    public RestResp unauth(@PathVariable Long userId ,@RequestBody String resourceIds){
         return userService.unauth(userId,resourceIds);
     }
 }
