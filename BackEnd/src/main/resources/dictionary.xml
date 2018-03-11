@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dictionaries>
+  <dictionary id="1" name="资产管理规模" col-name="assetManageScale">
+    <dictionary-item id="1" name="300万元以下"></dictionary-item>
+    <dictionary-item id="2" name="300万-500万"></dictionary-item>
+    <dictionary-item id="3" name="500万以上"></dictionary-item>
+  </dictionary>
+  <dictionary id="2" name="拟发行私募时间" col-name="privateIssuanceTime">
+    <dictionary-item id="1" name="立刻发行"></dictionary-item>
+    <dictionary-item id="2" name="3个月内"></dictionary-item>
+    <dictionary-item id="3" name="3-6个月内"></dictionary-item>
+    <dictionary-item id="4" name="无法确定"></dictionary-item>
+  </dictionary>
+  <dictionary id="3" name="是否具备基金从业资格" col-name="fundQualification">
+    <dictionary-item id="1" name="1人具备从业资格"></dictionary-item>
+    <dictionary-item id="2" name="2人或2人以上具备从业资格"></dictionary-item>
+    <dictionary-item id="3" name="不具备"></dictionary-item>
+  </dictionary>
+  <dictionary id="4" name="私募运行阶段" col-name="privateIssuanceStage">
+    <dictionary-item id="1" name="尚未成立公司"></dictionary-item>
+    <dictionary-item id="2" name="初创型私募"></dictionary-item>
+    <dictionary-item id="3" name="成长型私募"></dictionary-item>
+  </dictionary>
+  <dictionary id="5" name="是否在基金业协会备案" col-name="fundAssociationRecord">
+    <dictionary-item id="1" name="已备案登记"></dictionary-item>
+    <dictionary-item id="2" name="尚未备案登记"></dictionary-item>
+  </dictionary>
+  <dictionary id="6" name="发行产品情况" col-name="productDistribution">
+    <dictionary-item id="1" name="未曾发行产品"></dictionary-item>
+    <dictionary-item id="2" name="已发行产品"></dictionary-item>
+  </dictionary>
+</dictionaries>
