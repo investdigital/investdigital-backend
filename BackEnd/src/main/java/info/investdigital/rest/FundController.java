@@ -1,14 +1,11 @@
 package info.investdigital.rest;
 
 import info.investdigital.common.RestResp;
-import info.investdigital.entity.*;
 import info.investdigital.service.FundService;
-import org.springframework.validation.BindingResult;
-import info.investdigital.entity.FundCommentVO;
 import org.springframework.web.bind.annotation.*;
+
 import javax.annotation.Resource;
-import javax.validation.Valid;
-import java.math.BigInteger;
+
 /**
  * @author ccl
  * @time 2017-12-13 15:10
@@ -18,63 +15,38 @@ import java.math.BigInteger;
 @RestController
 @RequestMapping(value = "/fund")
 public class FundController {
-
     @Resource
     private FundService fundService;
-    //issue fund
-    @PostMapping(value = "/issueFund")
-    public RestResp issueFund(@Valid @RequestBody FundDetail fundDetail, BindingResult bindingResult){
-        if(bindingResult.hasErrors()){
-            return RestResp.fail(bindingResult.getAllErrors().get(0).getDefaultMessage());
+
+    @GetMapping(value = "/all")
+    public RestResp findAllFund(@RequestParam Integer sort, @RequestParam Integer pageSize, @RequestParam Integer pageNum) {
+        if(!check(sort,pageSize,pageNum)){
+            return RestResp.fail("Parameters of illegal");
         }
-        return fundService.issuefund(fundDetail);
+        return fundService.listFund(sort,pageSize, pageNum);
     }
-    //Review the fund
-    @GetMapping(value = "/reviewFund/{fundCode}/{status}")
-    public RestResp ReviewFund(@PathVariable BigInteger fundCode,@PathVariable Integer status) throws Exception {
-        return fundService.reviewFund(fundCode,status);
-    }
-    //subscrip the fund
-    @PostMapping(value = "/subscripFund")
-    public RestResp subscripFund(@RequestBody SubscribeInfo subscribeInfo){
-        return fundService.subFund(subscribeInfo);
-    }
-    @PostMapping(value = "/transferFundShare")
-    public RestResp transferFundShare(@RequestBody TransferInfo transferInfo){
-        return fundService.transferFundShare(transferInfo);
-    }
-    @GetMapping(value = "/findAllFund")
-    public RestResp findAllFund(Integer pageSize, Integer pageNum){
-        return fundService.findAllFund(pageSize,pageNum);
+    @GetMapping(value = "/earing/{fundCode}")
+    public RestResp earing(@PathVariable Long fundCode){
+        return fundService.getFundEchart(fundCode);
     }
 
-    @GetMapping(value = "/fundInfo")
-    public RestResp fundInfo(BigInteger fundCode){
+    @GetMapping(value = "/{fundCode}")
+    public RestResp fundInfo(@PathVariable Long fundCode) {
         return fundService.getFundInfos(fundCode);
     }
 
-    @GetMapping(value = "/addtest")
-    public RestResp addtest(){
-        fundService.addtest();
-        return RestResp.success();
-    }
-    @GetMapping(value = "/findStarFund")
-    public RestResp findStarFund(){
-        return fundService.findStarFund();
+    @GetMapping(value = "/star")
+    public RestResp listStarFund() {
+        return fundService.listStarFund();
     }
 
-    @GetMapping(value = "/comment")
-    public RestResp fundComment(Long fundId,Integer pageSize,Integer pageNum){
-        return fundService.fundComment(fundId,pageSize,pageNum);
+    private boolean check(Integer sort,Integer pageSize,Integer pageNum){
+        sort = sort == null ? 1 : sort;
+        pageSize = pageSize == null ? 1 : pageSize;
+        pageNum = pageNum == null ? 8 : pageNum;
+        if(sort > 4 || sort < 1){
+            return false;
+        }
+        return true;
     }
-    @PostMapping(value = "/comment")
-    public RestResp fundComment(@RequestBody FundComment comment){
-        return fundService.addComment(comment);
-    }
-
-    @RequestMapping(value = "/image")
-    public RestResp images(@ModelAttribute FundCommentVO vo) throws Exception{
-        return fundService.images(vo);
-    }
-
 }

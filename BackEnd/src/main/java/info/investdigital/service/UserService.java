@@ -1,39 +1,27 @@
 package info.investdigital.service;
-import info.investdigital.auth.JwtService;
-import info.investdigital.dao.PrepareAddressRepo;
-import info.investdigital.dao.UserRepo;
-import info.investdigital.entity.*;
-import info.investdigital.common.*;
-import info.investdigital.uc.UCHelper;
-import lombok.extern.slf4j.Slf4j;
-
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-
 
 import com.google.code.kaptcha.impl.DefaultKaptcha;
 import com.oxchains.basicService.files.tfsService.TFSConsumer;
-import info.investdigital.dao.ApplyvRepo;
-import info.investdigital.dao.RoleRepo;
-import info.investdigital.dao.UserRoleRepo;
-import org.springframework.beans.factory.annotation.Value;
+import info.investdigital.auth.JwtService;
+import info.investdigital.common.*;
+import info.investdigital.dao.*;
+import info.investdigital.entity.*;
+import info.investdigital.uc.UCHelper;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.web.multipart.MultipartFile;
-import org.web3j.abi.FunctionEncoder;
-import org.web3j.abi.TypeReference;
-import org.web3j.abi.datatypes.Address;
-import org.web3j.abi.datatypes.Function;
-import org.web3j.abi.datatypes.Type;
+
 import javax.annotation.Resource;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+
 import static com.google.common.collect.Lists.newArrayList;
 
 /**
@@ -42,14 +30,10 @@ import static com.google.common.collect.Lists.newArrayList;
  * @name UserService
  * @desc:
  */
-
-//@Transactional
 @Slf4j
 @Service
-@Transactional(rollbackFor=Exception.class)
-public class UserService{
-
-    //private static final Logger log = LoggerFactory.getLogger(UserService.class);
+@Transactional(rollbackFor = Exception.class)
+public class UserService {
 
     @Resource
     private UserRepo userRepo;
@@ -61,6 +45,9 @@ public class UserService{
 
     @Resource
     MailService mailService;
+
+    @Resource
+    SendGridService sendGridService;
 
     @Resource
     PrepareAddressRepo prepareAddressRepo;
@@ -82,331 +69,371 @@ public class UserService{
 
 
     @Resource
-    private Web3Service web3Service;
+    private SmsService smsService;
 
-    public String getRandomAddress(){
-        Pageable pageable = new PageRequest(1,1,null);
+    @Resource
+    private UserActivityRepo userActivityRepo;
+
+    @Resource
+    private MyMessageSource myMessageSource;
+
+    @Resource
+    private RegInvitationRepo regInvitationRepo;
+
+    @Resource
+    private UResParam uresParam;
+
+    public String getRandomAddress() {
+        Pageable pageable = new PageRequest(1, 1, null);
         List<PrepareAddress> content = prepareAddressRepo.findAll(pageable).getContent();
-        if(content.size()>0){
+        if (content.size() > 0) {
             PrepareAddress prepareAddress = content.get(0);
-            String address =  prepareAddress.getAddress();
+            String address = prepareAddress.getAddress();
             prepareAddressRepo.delete(prepareAddress.getId());
             return address;
         }
         return null;
     }
-    public RestResp addUser(User user) {
+
+    public RestResp addUser(User user) throws Exception {
         boolean mail = false;
-        if(null == user){
-            return RestResp.fail("请正确提交的注册信息");
+        if (null == user) {
+            return RestResp.fail(getMessage(I18NConst.SUBMIT_REGISTRATION_INFORMATION_CORRECTLY));
         }
-        if(null == user.getLoginname() || !RegexUtils.match(user.getLoginname(),RegexUtils.REGEX_NAME_LEN32)){
-            return RestResp.fail("请正确填写登录名，只能包含字母、数字、下划线，且只能以字母开头");
+        if (null == user.getLoginname() || !RegexUtils.match(user.getLoginname(), RegexUtils.REGEX_NAME_LEN15)) {
+            return RestResp.fail(getMessage(I18NConst.LOGIN_NAME_FORMAT));
         }
-        if(null != user.getMobilephone()){
-            if(!RegexUtils.match(user.getMobilephone(),RegexUtils.REGEX_MOBILEPHONE)){
-                return RestResp.fail("请正确填写手机号");
+        if (null != user.getMobilephone()) {
+            if (!RegexUtils.match(user.getMobilephone(), RegexUtils.REGEX_MOBILEPHONE)) {
+                return RestResp.fail(getMessage(I18NConst.FILL_PHONE_NUMBER_CORRECTLY));
             }
         }
-        if(null != user.getEmail()){
-            if(!RegexUtils.match(user.getEmail(),RegexUtils.REGEX_EMAIL)){
-                return RestResp.fail("请正确填写邮箱地址");
+        if (null != user.getEmail()) {
+            if (!RegexUtils.match(user.getEmail(), RegexUtils.REGEX_EMAIL)) {
+                return RestResp.fail(getMessage(I18NConst.FILL_MAIL_ADDRESS_CORRECTLY));
             }
             user.setEnabled(Status.EnableStatus.UNENABLED.getStatus());
             mail = true;
-        }else {
+        } else {
             user.setEnabled(Status.EnableStatus.ENABLED.getStatus());
         }
         Optional<User> optional = getUser(user);
         if (optional.isPresent()) {
             User u = optional.get();
-            if(null != user.getLoginname() && user.getLoginname().equals(u.getLoginname())){
-                return RestResp.fail("用户名已经存在");
+            if (null != user.getLoginname() && user.getLoginname().equals(u.getLoginname())) {
+                return RestResp.fail(getMessage(I18NConst.USER_ALREADY_EXIST));
             }
-            if(null != user.getMobilephone() && user.getMobilephone().equals(u.getMobilephone())){
-                return RestResp.fail("该手机号已被注册");
+            if (null != user.getMobilephone() && user.getMobilephone().equals(u.getMobilephone())) {
+                return RestResp.fail(getMessage(I18NConst.PHONE_NUMBER_REGISTERED));
             }
-            if(null != user.getEmail() && user.getEmail().equals(u.getEmail())){
-                return RestResp.fail("该邮箱已被注册");
+            if (null != user.getEmail() && user.getEmail().equals(u.getEmail())) {
+                return RestResp.fail(getMessage(I18NConst.MAIL_ADDRESS_REGISTERED));
             }
-            return RestResp.fail("注册用户已经存在");
+            return RestResp.fail(getMessage(I18NConst.USER_ALREADY_EXIST));
         }
-        if(null==user.getPassword() || "".equals(user.getPassword().trim())){
-            return RestResp.fail("请正确填写登录密码");
+        if (null == user.getPassword() || "".equals(user.getPassword().trim())) {
+            return RestResp.fail(getMessage(I18NConst.FILL_LOGIN_PASSWORD_CORRECTLY));
         }
         user.setPassword(EncryptUtils.encodeSHA256(user.getPassword()));
-        if(null == user.getCreateTime()){
+        if (null == user.getCreateTime()) {
             user.setCreateTime(DateUtil.getPresentDate());
         }
 
-        if (null == user.getLoginStatus()){
+        if (null == user.getLoginStatus()) {
             user.setLoginStatus(0);
         }
 
         user = userRepo.save(user);
-        //certificationUser tochains
-        this.certificationUser(user.getId());
         if (user == null) {
-            return RestResp.fail("操作失败");
+            return RestResp.fail(getMessage(I18NConst.ACTION_FAILURE));
         }
 
-        if(mail){
-            String url = "http://"+"----------"+"/islive?email="+user.getEmail();
+        if (mail) {
+            String url = "http://" + "----------" + "/islive?email=" + user.getEmail();
             try {
-                mailService.sendHtmlMail(user.getEmail(),"账号激活","请点击以下链接进行账号激活操作：\n" +
-                        "<a href='"+url+"'>点击这里</a>");
-                return RestResp.success("注册成功，验证信息已经发送到邮箱："+user.getEmail()+"中，请前往操作",null);
-            }catch (Exception e){
-                log.error("邮件发送异常",e);
-                return RestResp.fail("邮件发送失败,请重新操作");
+                mailService.sendHtmlMail(user.getEmail(), "账号激活", "请点击以下链接进行账号激活操作：\n" +
+                        "<a href='" + url + "'>点击这里</a>");
+                return RestResp.success(getMessage(I18NConst.REGISTER_SUCCESS_EMAIL) + user.getEmail() + getMessage(I18NConst.PLEASE_OPERATION), null);
+            } catch (Exception e) {
+                log.error("邮件发送异常", e);
+                return RestResp.fail(getMessage(I18NConst.SEND_MAIL_FAILED));
             }
-        }else {
-            return RestResp.success("注册成功",null);
+        } else {
+            return RestResp.success(getMessage(I18NConst.REGISTER_SUCCESS), null);
         }
     }
 
-    public boolean deleteUserForChain(Long userId){
-        try {
-            String from  = ParamZero.IDOperationUserAddress;
-            String firstAddress = userRepo.findOne(userId).getFirstAddress();
-            Function function = new Function(
-                    "deleteUser",
-                    Arrays.<Type>asList(new Address(firstAddress)),
-                    Collections.<TypeReference<?>>emptyList());
-            String data = FunctionEncoder.encode(function);
-            EthTransactionEntity ethTransactionEntity = new EthTransactionEntity(web3Service.getNonce(from),from,ParamType.ContractAddress.USER_CONTRACT.getAddress(),"0x00",data);
-            String txStr = web3Service.getTxStr(JsonUtil.toJson(ethTransactionEntity));
-            boolean b = web3Service.sendRawTransaction(txStr);
-            return b;
-        } catch (Exception e) {
-            log.error("delete user for chain error userID:{} Csusy By:{}",userId,e.getMessage(),e);
-            return false;
+    public RestResp signup(UserVO vo) throws Exception {
+        if (null == vo) {
+            return RestResp.fail(getMessage(I18NConst.SUBMIT_REGISTRATION_INFORMATION_CORRECTLY));
         }
-    }
-
-    public void certificationUser(Long userId){
-        try {
-            User user = userRepo.findOne(userId);
-            //给用户分配一个全新的地址
-            String randomAddress = this.getRandomAddress();
-            user.setFirstAddress(randomAddress);
-            userRepo.save(user);
-            boolean b = this.certificationUserAddress(randomAddress);
-            if(b){
-                log.info("certification user address error userId:{}",userId);
+        User user = null;
+        String vcode = null;
+        boolean mail = false;
+        if (Const.CFIELD.EMAIL.getFieldName().equals(vo.getVfield())) {
+            mail = true;
+            if (null == vo.getEmail() || !RegexUtils.match(vo.getEmail(), RegexUtils.REGEX_EMAIL)) {
+                return RestResp.fail(getMessage(I18NConst.FILL_MAIL_ADDRESS_CORRECTLY));
+            } else {
+                vo.setEnabled(Status.EnableStatus.ENABLED.getStatus());
             }
-        } catch (Exception e) {
-           log.error("certification user address error:{}",e.getMessage(),e);
-        }
-    }
-    //将用户地址认证到合约地址
-    public boolean certificationUserAddress(String address) throws Exception {
-        try {
-            String to = ParamType.ContractAddress.USER_CONTRACT.getAddress();
-            String from = ParamZero.IDOperationUserAddress;
-            Function function = new Function(
-                    "addUser",
-                    Arrays.<Type>asList(new Address(address)),
-                    Collections.<TypeReference<?>>emptyList());
-            String data = FunctionEncoder.encode(function);
-            EthTransactionEntity ethTransactionEntity = new EthTransactionEntity(web3Service.getNonce(from),from,to,"0x00",data);
-            String s = JsonUtil.toJson(ethTransactionEntity);
-            String txStr = web3Service.getTxStr(s);
-            boolean b = web3Service.sendRawTransaction(txStr);
-            return b;
-        } catch (Exception e) {
-            log.error("certification User Address faild:{}",e.getMessage(),e);
-            throw e;
+            user = userRepo.findByEmail(vo.getEmail());
+            if (null != user) {
+                return RestResp.fail(getMessage(I18NConst.MAIL_ADDRESS_REGISTERED));
+            }
+            vo.setLoginname(vo.getEmail());
+            vcode = getVcodeFromRedis(vo.getEmail());
+        } else if (Const.CFIELD.MOBILE_PHONE.getFieldName().equals(vo.getVfield())) {
+            if (null == vo.getMobilephone() || !RegexUtils.match(vo.getMobilephone(), RegexUtils.REGEX_MOBILEPHONE)) {
+                return RestResp.fail(getMessage(I18NConst.FILL_PHONE_NUMBER_CORRECTLY));
+            } else {
+                vo.setEnabled(Status.EnableStatus.ENABLED.getStatus());
+            }
+            user = userRepo.findByMobilephone(vo.getMobilephone());
+            if (null != user) {
+                return RestResp.fail(getMessage(I18NConst.PHONE_NUMBER_BEEN_USED));
+            }
+            vcode = getVcodeFromRedis(vo.getMobilephone());
+            vo.setLoginname(vo.getMobilephone());
+        } else {
+            return RestResp.fail(getMessage(I18NConst.REGISTER_FAILURE));
         }
 
-    }
-    public RestResp signup(UserVO user) {
-        if(null == user){
-            return RestResp.fail("请正确提交的注册信息");
+        if (null == vo.getPassword() || "".equals(vo.getPassword().trim())) {
+            return RestResp.fail(getMessage(I18NConst.FILL_LOGIN_PASSWORD_CORRECTLY));
         }
+        vo.setCreateTime(DateUtil.getPresentDate());
+        vo.setLoginStatus(Status.LoginStatus.LOGOUT.getStatus());
+        String password = vo.getPassword();
+        vo.setPassword(EncryptUtils.encodeSHA256(password));
 
-        if(null != user.getEmail()){
-            if(!RegexUtils.match(user.getEmail(),RegexUtils.REGEX_EMAIL)){
-                return RestResp.fail("请正确填写邮箱地址");
+        if (null == vcode || "".equals(vcode.trim()) || !vcode.equals(vo.getVcode().trim())) {
+            return RestResp.fail(getMessage(I18NConst.FILL_VERIFYING_CODE_CORRECTLY));
+        }
+        vo.setImage(/*defaultUserAvatar*/uresParam.getDefaultUserAvatar());
+        /*UserVO userInfo = null;
+        try{
+            User u = userRepo.save(vo.userVO2User());
+            if (u == null) {
+                return RestResp.fail(getMessage(I18NConst.ACTION_FAILURE));
             }
-            user.setEnabled(Status.EnableStatus.ENABLED.getStatus());
-        }else {
-            return RestResp.fail("请正确填写邮箱地址");
-        }
-        Optional<User> optional = getUser(user);
-        if (optional.isPresent()) {
-            User u = optional.get();
-            if(null != u.getEmail() && u.getEmail().equals(user.getEmail())){
-                return RestResp.fail("该邮箱已被注册");
+
+            addUserRole(u.getId(), Const.ROLE.USER.getId());
+            userInfo = new UserVO(u);
+            userInfo.setRoles(getRoles(u.getId()));
+            if (null != discuzSyncSignup && discuzSyncSignup.intValue() == Const.ENABLE.ENABLEED.getEnable() && mail) {
+                UCHelper.reg(userInfo.getLoginname(), password, userInfo.getEmail());
             }
-            return RestResp.fail("注册用户已经存在");
-        }
-        if(null==user.getPassword() || "".equals(user.getPassword().trim())){
-            return RestResp.fail("请正确填写登录密码");
-        }
-        String password = user.getPassword();
-        user.setPassword(EncryptUtils.encodeSHA256(password));
-        if(null == user.getCreateTime()){
-            user.setCreateTime(DateUtil.getPresentDate());
-        }
-        if (null == user.getLoginStatus()){
-            user.setLoginStatus(0);
-        }
-        String vcode = getVcodeFromRedis(user.getEmail());
-        if(null == vcode || "".equals(vcode.trim()) || !vcode.equals(user.getVcode().trim())){
-            return RestResp.fail("请正确填写验证码");
-        }
-        user.setLoginname(user.getEmail());
-       User u = userRepo.save(user.userVO2User());
+            if(null != invitationCode && !"".equals(invitationCode.trim())){
+                RegInvitation regInvitation = new RegInvitation(vo.getLoginname(),invitationCode);
+                regInvitationRepo.save(regInvitation);
+            }
+            return RestResp.success(getMessage(I18NConst.REGISTER_SUCCESS), userInfo);
+        }catch (Exception e){
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return RestResp.fail(getMessage(I18NConst.REGISTER_FAILURE));
+        }*/
+
+        User u = userRepo.save(vo.userVO2User());
         if (u == null) {
-            return RestResp.fail("操作失败");
+            return RestResp.fail(getMessage(I18NConst.ACTION_FAILURE));
         }
-
-        addUserRole(u.getId(),Const.ROLE.USER.getId());
+        addUserRole(u.getId(), Const.ROLE.USER.getId());
         UserVO userInfo = new UserVO(u);
         userInfo.setRoles(getRoles(u.getId()));
-        UCHelper.reg(userInfo.getLoginname(),password,userInfo.getEmail());
-        return RestResp.success("注册成功",userInfo);
-
+        if(uresParam.isAutomaticSign()){
+            String originToken = jwtService.generate(userInfo);
+            token = "Bearer " + originToken;
+            log.info("automaitc login token = " + token);
+            userInfo.setToken(token);
+        }
+        if (uresParam.isDiscuzSyncSignup() && mail) {
+            try {
+                UCHelper.reg(userInfo.getLoginname(), password, userInfo.getEmail());
+            } catch (Exception e) {
+                TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                return RestResp.success(getMessage(I18NConst.FORUM_SYNCHRONIZED_REGISTRATION_FAILURE), userInfo);
+            }
+        }
+        if(uresParam.isAutomaticSign() && uresParam.isDiscuzSyncSignin()){
+            try{
+                String str = UCHelper.login(userInfo.getLoginname(),password);
+                userInfo.setDiscuzSyncScript(str);
+                log.info("automatic login ---discuz---: ",str);
+            }catch (Exception e){
+                log.info("automatic login ---discuz---: failure ");
+            }
+        }
+       return RestResp.success(getMessage(I18NConst.REGISTER_SUCCESS), userInfo);
     }
 
-
-    public RestResp updateUser(User user) {
-        User u = userRepo.findByLoginname(user.getLoginname());
-        if(u==null){
-            return RestResp.fail("提交信息有误");
+    public RestResp updateUser(UserVO vo) {
+        User u = userRepo.findByLoginname(vo.getLoginname());
+        if (u == null) {
+            return RestResp.fail(getMessage(I18NConst.INFORMATION_INCORRECT));
         }
-        u.setUsername(user.getUsername());
-        user = userRepo.save(u);
+        u.setUsername(vo.getUsername());
+        User user = userRepo.save(u);
         if (user == null) {
-            return RestResp.fail("操作失败");
+            return RestResp.fail(getMessage(I18NConst.ACTION_FAILURE));
         }
-        return RestResp.success("操作成功",null);
+        return RestResp.success(getMessage(I18NConst.ACTION_SUCCESS), null);
     }
-    public RestResp updateUser(User user, ParamType.UpdateUserInfoType uuit) {
+
+    public RestResp updateUser(UserVO user, ParamType.UpdateUserInfoType uuit) {
         Object res = null;
-        if(null == user){
-            return RestResp.fail("参数不能为空");
+        if (null == user) {
+            return RestResp.fail(getMessage(I18NConst.PARAMETERS_NOT_EMPTY));
         }
-        if(user.getLoginname()==null){
-            return RestResp.fail("用户名不能为空");
+        if (user.getLoginname() == null) {
+            return RestResp.fail(getMessage(I18NConst.USERNAME_NOT_EMPTY));
         }
         User u = userRepo.findByLoginname(user.getLoginname());
-        if(null == u){
-            return RestResp.fail("用户信息不正确");
+        if (null == u) {
+            return RestResp.fail(getMessage(I18NConst.USER_INFORMATION_INCORRECT));
         }
-        switch (uuit){
-            case INFO:
-                boolean flag = false;
-                if(null!=user.getDescription() && !"".equals(user.getDescription().trim())) {
-                    u.setDescription(user.getDescription());
-                    flag = true;
-                }
-                if(!flag){
-                    return RestResp.fail("没有需要修改的信息");
-                }
-                break;
+        String vcode = null;
+        switch (uuit) {
             case PWD:
-                if(null==user.getPassword() || "".equals(user.getPassword().trim())){
-                    return RestResp.fail("旧密码不能为空");
+                if (null == user.getPassword() || "".equals(user.getPassword().trim())) {
+                    return RestResp.fail(getMessage(I18NConst.OLD_PASSWORD_NOT_EMPTY));
                 }
-                if(null==user.getNewPassword() || "".equals(user.getNewPassword().trim())){
-                    return RestResp.fail("新密码不能为空");
+                String newPassword = user.getNewPassword();
+                if (null == newPassword || "".equals(newPassword.trim())) {
+                    return RestResp.fail(getMessage(I18NConst.NEW_PASSWORD_NOT_EMPTY));
                 }
-                if(EncryptUtils.encodeSHA256(user.getPassword()).equals(u.getPassword())){
-                    u.setPassword(EncryptUtils.encodeSHA256(user.getNewPassword()));
-                }else {
-                    return RestResp.fail("输入的旧密码错误");
+                if (EncryptUtils.encodeSHA256(user.getPassword()).equals(u.getPassword())) {
+                    if (uresParam.isDiscuzSyncResetpwd() && null != u.getEmail()) {
+                        boolean flag1 = UCHelper.resetpwd(u.getLoginname(), u.getEmail(), newPassword);
+                        if (!flag1) {
+                            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                            return RestResp.fail(getMessage(I18NConst.RESET_PASSWORD_FAILURE), null);
+                        }
+                    }
+                    u.setPassword(EncryptUtils.encodeSHA256(newPassword));
+                } else {
+                    return RestResp.fail(getMessage(I18NConst.OLD_PASSWORD_ERROR));
                 }
-                break;
-            case FPWD:
-                u.setFpassword(EncryptUtils.encodeSHA256(user.getFpassword()));
                 break;
             case EMAIL:
-                if(null == user.getEmail() || "".equals(user.getEmail().trim()) || !RegexUtils.match(user.getEmail(),RegexUtils.REGEX_EMAIL)){
-                    return RestResp.fail("请输入正确的邮箱地址");
+                if (null == user.getEmail() || "".equals(user.getEmail().trim()) || !RegexUtils.match(user.getEmail(), RegexUtils.REGEX_EMAIL)) {
+                    return RestResp.fail(getMessage(I18NConst.FILL_MAIL_ADDRESS_CORRECTLY));
                 }
-                if(u.getEmail().equals(user.getEmail())){
-                    return RestResp.fail("邮箱正在使用");
+                if (user.getEmail().equals(u.getEmail())) {
+                    return RestResp.fail(getMessage(I18NConst.MAIL_ADDRESS_BEING_USED));
                 }
-                User eu = userRepo.findByEmail(user.getEmail());
-                if(null != eu){
-                    return RestResp.fail("邮箱已被使用");
+                vcode = getVcodeFromRedis(user.getEmail());
+                if (null == user.getVcode() || "".equals(user.getVcode().trim()) || null == vcode || !vcode.equals(user.getVcode())) {
+                    return RestResp.fail(getMessage(I18NConst.FILL_VERIFYING_CODE_CORRECTLY));
                 }
-                //TODO 发送邮件
+                String password = user.getPassword();
+                String encrypt = EncryptUtils.encodeSHA256(password);
+                if(null == password || !u.getPassword().equals(EncryptUtils.encodeSHA256(password))){
+                    return RestResp.fail(getMessage(I18NConst.FILL_LOGIN_PASSWORD_CORRECTLY));
+                }
 
+                User eu = userRepo.findByEmail(user.getEmail());
+                if (null != eu) {
+                    return RestResp.fail(getMessage(I18NConst.MAIL_ADDRESS_BEEN_USED));
+                }
+                if (/*discuzSyncSignup*/uresParam.isDiscuzSyncSignup()) {
+                    try{
+                        UCHelper.reg(u.getLoginname(),password,user.getEmail());
+                    }catch (Exception e){
+                        return RestResp.fail("绑定邮箱失败");
+                    }
+                }
                 u.setEmail(user.getEmail());
                 break;
             case PHONE:
-                if(null == user.getMobilephone() || "".equals(user.getMobilephone().trim()) || !RegexUtils.match(user.getMobilephone(),RegexUtils.REGEX_MOBILEPHONE)){
-                    return RestResp.fail("请输入正确的手机号");
+                if (null == user.getMobilephone() || "".equals(user.getMobilephone().trim()) || !RegexUtils.match(user.getMobilephone(), RegexUtils.REGEX_MOBILEPHONE)) {
+                    return RestResp.fail(getMessage(I18NConst.FILL_PHONE_NUMBER_CORRECTLY));
                 }
-                if(u.getMobilephone().equals(user.getMobilephone())){
-                    return RestResp.fail("手机号正在使用");
+                if (user.getMobilephone().equals(u.getMobilephone())) {
+                    return RestResp.fail(getMessage(I18NConst.PHONE_NUMBER_BEING_USED));
+                }
+                vcode = getVcodeFromRedis(user.getMobilephone());
+                if (null == user.getVcode() || "".equals(user.getVcode().trim()) || null == vcode || !vcode.equals(user.getVcode())) {
+                    return RestResp.fail(I18NConst.FILL_VERIFYING_CODE_CORRECTLY);
                 }
                 User mu = userRepo.findByMobilephone(user.getMobilephone());
-                if(null != mu){
-                    return RestResp.fail("手机号已被使用");
+                if (null != mu) {
+                    return RestResp.fail(getMessage(I18NConst.PHONE_NUMBER_BEEN_USED));
                 }
-                //TODO 发送验证码
                 u.setMobilephone(user.getMobilephone());
                 break;
-                default:
-                    break;
+            case NICK_NAME:
+
+                if (null == user.getUsername() || "".equals(user.getUsername().trim())) {
+                    return RestResp.fail(getMessage(I18NConst.MODIFY_NICKNAME_NOT_EMPTY));
+
+                }
+                if (user.getUsername().equals(u.getUsername())) {
+                    return RestResp.fail(getMessage(I18NConst.NOT_MADE_ANY_CHANGES));
+                }
+                u.setUsername(user.getUsername());
+                break;
+            default:
+                break;
         }
 
         return save(u, res);
     }
-    public RestResp avatar(User user){
-        if(null == user){
-            return RestResp.fail("参数不能为空");
+
+    public RestResp avatar(UserVO vo) {
+        if (null == vo) {
+            return RestResp.fail(getMessage(I18NConst.PARAMETERS_NOT_EMPTY));
         }
-        if(user.getLoginname()==null){
-            return RestResp.fail("用户名不能为空");
+        /*if (vo.getLoginname() == null) {
+            return RestResp.fail(getMessage(I18NConst.USERNAME_NOT_EMPTY));
         }
-        User u = userRepo.findByLoginname(user.getLoginname());
-        MultipartFile file = user.getFile();
-        if(null != file) {
-            String fileName = file.getOriginalFilename();
-            String suffix = fileName.substring(fileName.lastIndexOf("."));
+        User u = userRepo.findByLoginname(vo.getLoginname());*/
+
+        Optional<User> optional = getUser(vo);
+        if (!optional.isPresent()) {
+            return RestResp.fail(getMessage(I18NConst.USER_INFORMATION_EXECPTION));
+        }
+        User u = optional.get();
+        MultipartFile file = vo.getFile();
+        if (null != file) {
             String newFileName = tfsConsumer.saveTfsFile(file, u.getId());
             if (null == newFileName) {
-                return RestResp.fail("头像上传失败");
+                return RestResp.fail(getMessage(I18NConst.IMAGE_UPLOAD_FAILED));
             }
             u.setImage(newFileName);
             userRepo.save(u);
-            return RestResp.success("头像上传成功",newFileName);
+            return RestResp.success(getMessage(I18NConst.IMAGE_UPLOAD_SUCCESS), newFileName);
         }
-        return RestResp.fail("上传头像失败");
+        return RestResp.fail(getMessage(I18NConst.IMAGE_UPLOAD_FAILED));
     }
-    private RestResp save(User user,Object res){
+
+    private RestResp save(User user, Object res) {
         try {
             userRepo.save(user);
-            return RestResp.success("操作成功",res);
-        }catch (Exception e){
+            return RestResp.success(getMessage(I18NConst.ACTION_SUCCESS), res);
+        } catch (Exception e) {
             log.error("保存用户信息异常", e);
-            return RestResp.fail("操作失败");
+            return RestResp.fail(getMessage(I18NConst.ACTION_FAILURE));
         }
     }
 
+    @Deprecated
     public RestResp login(User user) {
         user.setPassword(EncryptUtils.encodeSHA256(user.getPassword()));
-        try{
+        try {
             Optional<User> optional = findUser(user);
             return optional.map(u -> {
-                if(u.getEnabled().equals(Status.EnableStatus.UNENABLED.getStatus())){
-                    return RestResp.fail("账号未激活");
+                if (u.getEnabled().equals(Status.EnableStatus.UNENABLED.getStatus())) {
+                    return RestResp.fail(getMessage(I18NConst.ACCOUNT_NOT_ACTICATED));
                 }
-                if(u.getLoginStatus().equals(Status.LoginStatus.LOGIN.getStatus())){
-                    return RestResp.fail("用户已经登录");
+                if (u.getLoginStatus().equals(Status.LoginStatus.LOGIN.getStatus())) {
+                    return RestResp.fail(getMessage(I18NConst.USER_BEEN_LOGIN));
                 }
-                String originToken = jwtService.generate(u);
-                token = "Bearer " + originToken;
 
-
-                log.info("token = " + token);
                 UserVO userInfo = new UserVO(u);
-
+                String originToken = jwtService.generate(userInfo);
+                token = "Bearer " + originToken;
+                log.info("token = " + token);
                 userInfo.setPassword(null);
                 userInfo.setToken(token);
 
@@ -415,56 +442,89 @@ public class UserService{
                 User save = userRepo.save(u);
 
                 //new UserToken(u.getUsername(),token)
-                return RestResp.success("登录成功", userInfo);
-            }).orElse(RestResp.fail("登录账号或密码错误"));
-        }catch (Exception e){
-            log.error("用户信息异常",e);
-            return RestResp.fail("用户信息异常");
+                return RestResp.success(getMessage(I18NConst.LOGIN_SUCCESS), userInfo);
+            }).orElse(RestResp.fail(getMessage(I18NConst.ACCOUNT_OR_PASSWORD_ERROR)));
+        } catch (Exception e) {
+            log.error("用户信息异常", e);
+            return RestResp.fail(getMessage(I18NConst.USER_INFORMATION_EXECPTION));
         }
     }
 
-    public RestResp signin(UserVO user) {
-        if(!RegexUtils.match(user.getEmail(),RegexUtils.REGEX_EMAIL)){
-            return RestResp.fail("账号有误");
+    public RestResp signin(UserVO vo) {
+        if (Const.CFIELD.EMAIL.getFieldName().equals(vo.getVfield())) {
+            if (null == vo.getEmail() || !RegexUtils.match(vo.getEmail(), RegexUtils.REGEX_EMAIL)) {
+                return RestResp.fail(getMessage(I18NConst.FILL_MAIL_ADDRESS_CORRECTLY));
+            }
+        } else if (Const.CFIELD.MOBILE_PHONE.getFieldName().equals(vo.getVfield())) {
+            if (null == vo.getMobilephone() || !RegexUtils.match(vo.getMobilephone(), RegexUtils.REGEX_MOBILEPHONE)) {
+                return RestResp.fail(getMessage(I18NConst.FILL_PHONE_NUMBER_CORRECTLY));
+            }
+        } else {
+            return RestResp.fail(getMessage(I18NConst.ACCOUNT_ERROR));
         }
-        user.setPassword(EncryptUtils.encodeSHA256(user.getPassword()));
-        try{
-            Optional<User> optional = findUser(user);
+//        if (!RegexUtils.match(vo.getEmail(), RegexUtils.REGEX_EMAIL)) {
+//            return RestResp.fail(getMessage(I18NConst.ACCOUNT_ERROR));
+//        }
+        String password = vo.getPassword();
+        vo.setPassword(EncryptUtils.encodeSHA256(password));
+        try {
+            Optional<User> optional = findUser(vo);
             return optional.map(u -> {
-                if(u.getEnabled().equals(Status.EnableStatus.UNENABLED.getStatus())){
-                    return RestResp.fail("账号未激活");
+                if (u.getEnabled().equals(Status.EnableStatus.UNENABLED.getStatus())) {
+                    return RestResp.fail(getMessage(I18NConst.ACCOUNT_NOT_ACTICATED));
                 }
-                if(u.getLoginStatus().equals(Status.LoginStatus.LOGIN.getStatus())){
-                    return RestResp.fail("用户已经登录");
+                if (u.getLoginStatus().equals(Status.LoginStatus.LOGIN.getStatus())) {
+                    return RestResp.fail(getMessage(I18NConst.USER_BEEN_LOGIN));
                 }
-                String originToken = jwtService.generate(u);
+
+                UserVO userInfo = new UserVO(u);
+                userInfo.setRoles(getRoles(userInfo.getId()));
+                String originToken = jwtService.generate(userInfo);
                 token = "Bearer " + originToken;
                 log.info("token = " + token);
-
-//                User userInfo = new User(u);
-                UserVO userInfo = new UserVO(u);
                 userInfo.setToken(token);
-                u.setLoginStatus(Status.LoginStatus.LOGOUT.getStatus());
-                User save = userRepo.save(u);
-
-                //new UserToken(u.getUsername(),token)
-                return RestResp.success("登录成功", userInfo);
-            }).orElse(RestResp.fail("登录账号或密码错误"));
-        }catch (Exception e){
-            log.error("用户信息异常",e);
-            return RestResp.fail("用户信息异常");
+//                u.setLoginStatus(Status.LoginStatus.LOGOUT.getStatus());
+//                User save = userRepo.save(u);
+                String discuzSigninScript = null;
+                if ( /*discuzSyncSignin*/uresParam.isDiscuzSyncSignin()  && null != u.getEmail()) {
+                    try {
+                        discuzSigninScript = UCHelper.login(userInfo.getLoginname(), password);
+                        log.info("Discuz Sync Signin Script: {}", discuzSigninScript);
+                    } catch (Exception e) {
+                        return RestResp.success(getMessage(I18NConst.FORUM_SYNCHRONIZED_LOGIN_FAILURE), userInfo);
+                    }
+                }
+                userInfo.setDiscuzSyncScript(discuzSigninScript);
+                return RestResp.success(getMessage(I18NConst.LOGIN_SUCCESS), userInfo);
+            }).orElse(RestResp.fail(getMessage(I18NConst.ACCOUNT_OR_PASSWORD_ERROR)));
+        } catch (Exception e) {
+            log.error("用户信息异常", e);
+            return RestResp.fail(getMessage(I18NConst.USER_INFORMATION_EXECPTION));
         }
     }
 
-    public RestResp logout(User user){
-        User u = userRepo.findByLoginname(user.getLoginname());
-        if(null != u && u.getLoginStatus().equals(Status.LoginStatus.LOGIN.getStatus())){
+    public RestResp logout(UserVO user) {
+        Optional<User> optional = getUser(user);
+        return optional.map(u -> {
             u.setLoginStatus(Status.LoginStatus.LOGOUT.getStatus());
             userRepo.save(u);
-            return RestResp.success("退出成功",null);
-        }else {
-            return RestResp.fail("退出失败");
-        }
+            String message = null;
+            if (/*discuzSyncSignin*/uresParam.isDiscuzSyncSignin()) {
+                try {
+                    message = UCHelper.logout();
+                    return RestResp.success(getMessage(I18NConst.LOGOUT_SUCCESS), message);
+                } catch (Exception e) {
+                    return RestResp.success(getMessage(I18NConst.FORUM_LOGOUT_FAILURE), e);
+                }
+            }
+            return RestResp.success(getMessage(I18NConst.LOGOUT_SUCCESS), message);
+        }).orElse(RestResp.fail(getMessage(I18NConst.ACCOUNT_ERROR)));
+    }
+
+    public RestResp signout(Long userId) {
+        UserVO user = new UserVO();
+        user.setId(userId);
+        return logout(user);
     }
 
     public Optional<User> findUser(User user) {
@@ -490,12 +550,18 @@ public class UserService{
         return Optional.empty();
     }
 
-    public Optional<User> getUser(User user){
+    public Optional<User> getUser(User user) {
         User u = null;
+        if (null != user.getId()) {
+            u = userRepo.findOne(user.getId());
+            if (null != u) {
+                return Optional.of(u);
+            }
+        }
         if (null != user.getLoginname()) {
             u = userRepo.findByLoginname(user.getLoginname());
             if (null != u) {
-                return  Optional.of(u);
+                return Optional.of(u);
             }
         }
         if (null != user.getEmail()) {
@@ -517,246 +583,348 @@ public class UserService{
         return RestResp.success(newArrayList(userRepo.findAll()));
     }
 
-    public RestResp getUser(Long id){
-        if(null == id){
-            return RestResp.fail("用户id不能为空");
+    public RestResp getUser(Long id) {
+        if (null == id) {
+            return RestResp.fail(getMessage(I18NConst.USER_ID_NOT_EMPTY));
         }
         User user = userRepo.findOne(id);
-        if(user != null){
+        if (user != null) {
             user.setPassword(null);
         }
         return RestResp.success(user);
     }
 
-    public boolean saveVcode(String key, String vcode){
+    public boolean saveVcode(String key, String vcode) {
         try {
             ValueOperations<String, String> ops = redisTemplate.opsForValue();
             ops.set(key, vcode, 5L, TimeUnit.MINUTES);
             return true;
-        }catch (Exception e){
-            log.error("Redis 操作异常:" ,e);
+        } catch (Exception e) {
+            log.error("Redis 操作异常:", e);
             return false;
         }
     }
 
-    public String getVcodeFromRedis(String key){
+    public String getVcodeFromRedis(String key) {
         String val = null;
-        try{
+        try {
             boolean flag = redisTemplate.hasKey(key);
-            if(!flag){
+            if (!flag) {
                 return val;
             }
-            ValueOperations<String,String> ops = redisTemplate.opsForValue();
+            ValueOperations<String, String> ops = redisTemplate.opsForValue();
             val = ops.get(key);
-            redisTemplate.delete(key);
+//            redisTemplate.delete(key);
             return val;
-        }catch (Exception e){
+        } catch (Exception e) {
             log.error("Redis 操作异常", e);
             return null;
         }
     }
 
-    @Value("${ID.frontend.url}")
-    private String frontEndUrl;
-    public RestResp sendVmail(VerifyCode vcode){
-        if(null == vcode){
-            return RestResp.fail("参数不能为空");
+    public RestResp sendVmail(VerifyCode vcode) {
+        if (null == vcode) {
+            return RestResp.fail(getMessage(I18NConst.PARAMETERS_NOT_EMPTY));
         }
-        if(null==vcode.getKey()||"".equals(vcode.getKey().trim()) || !vcode.getKey().contains("@")){
-            return RestResp.fail("输入的邮箱格式不正确");
+        if (null == vcode.getKey() || "".equals(vcode.getKey().trim()) || !vcode.getKey().contains("@")) {
+            return RestResp.fail(getMessage(I18NConst.MAIL_ADDRESS_FORMAT_INCORRECT));
         }
-        if(null == vcode.getVcode() || "".equals(vcode.getKey().trim())){
-            return RestResp.fail("验证码不能为空");
+        if (null == vcode.getVcode() || "".equals(vcode.getKey().trim())) {
+            return RestResp.fail(getMessage(I18NConst.VERIFYING_CODE_NOT_EMPTY));
         }
 
         String vcodeVal = getVcodeFromRedis(vcode.getKey());
         if (vcodeVal.equals(vcode.getVcode())) {
             String[] to = {vcode.getKey()};
-            String url = "http://"+frontEndUrl+"/resetpsw?email="+vcode.getKey()+"&vcode="+vcode.getVcode();
+            String url = "http://" + uresParam.getFrontEndUrl() + "/resetpsw?email=" + vcode.getKey() + "&vcode=" + vcode.getVcode();
             try {
                 //mailService.send(new Email(to,"修改密码","请点击以下链接进行密码修改操作：\n" +  url));
-                mailService.sendHtmlMail(vcode.getKey(),"修改密码","请点击以下链接进行密码修改操作：\n" +
-                        "<a href='"+url+"'>点击这里</a>");
-                return RestResp.success("邮件已发送到："+vcode.getKey()+"，请尽快修改您的密码",null);
-            }catch (Exception e){
-                log.error("邮件发送异常",e);
-                return RestResp.fail("邮件发送失败,请重新操作");
+                mailService.sendHtmlMail(vcode.getKey(), "修改密码", "请点击以下链接进行密码修改操作：\n" +
+                        "<a href='" + url + "'>点击这里</a>");
+                return RestResp.success(getMessage(I18NConst.MAIL_BEEN_SEND) + vcode.getKey() + getMessage(I18NConst.MODIFY_YOUR_PASSWORD), null);
+            } catch (Exception e) {
+                log.error("邮件发送异常", e);
+                return RestResp.fail(getMessage(I18NConst.SEND_MAIL_FAILED));
             }
         }
-        return RestResp.fail("验证码错误");
+        return RestResp.fail(getMessage(I18NConst.VERIFICATION_CODE_ERROR));
     }
 
-    private final String signupStr = "您好，</br></br>感谢您注册InvestDigital。</br></br>您的验证码是：%s</br></br>出于安全原因，该验证码将于30分钟后失效。请勿将该验证码透露给他人。</br></br></br>Sincerely</br>ID团队</br><a href='https://investdigital.info/'>https://investdigital.info/</a>";
     @Resource
     DefaultKaptcha defaultKaptcha;
-    public RestResp sendVmailCode(String email){
 
-        if(null==email||"".equals(email.trim()) || !RegexUtils.match(email,RegexUtils.REGEX_EMAIL)){
-            return RestResp.fail("输入的邮箱格式不正确");
+    public RestResp sendVmailCode(String email) {
+
+        if (null == email || "".equals(email.trim()) || !RegexUtils.match(email, RegexUtils.REGEX_EMAIL)) {
+            return RestResp.fail(getMessage(I18NConst.MAIL_ADDRESS_FORMAT_INCORRECT));
+
         }
         String code = defaultKaptcha.createText();
-        saveVcode(email,code);
+        saveVcode(email, code);
 
-        String content =String.format(signupStr,code);
-        try{
-            mailService.sendHtmlMail(email,"注册",content);
-            return RestResp.success("邮件已发送到："+email+"，请尽快登录获取",null);
-        }catch (Exception e){
-            log.error("邮件发送异常",e);
-            return RestResp.fail("邮件发送失败,请重新操作");
+        String content = String.format(/*signupStr*/uresParam.getSignupStr(), code);
+        try {
+            //mailService.sendHtmlMail(email, "验证码", content);
+            //sendGridService.sendMail(email, "验证码", content);
+            sendGridService.sendHtmlMail(email,"验证码",content);
+            return RestResp.success(getMessage(I18NConst.MAIL_BEEN_SEND) + email + getMessage(I18NConst.PLEAST_LOG_IN), null);
+        } catch (Exception e) {
+            log.error("邮件发送异常", e);
+            return RestResp.fail(getMessage(I18NConst.SEND_MAIL_FAILED));
         }
 
     }
-    public RestResp resetpwd(String resetkey,String password){
-        User u = null;
-        if(resetkey == null || "".equals(resetkey.trim())){
-            return RestResp.fail("账号非法");
+
+    public RestResp sendPhoneCode(String mobilephone) {
+        if (null == mobilephone || "".equals(mobilephone.trim()) || !RegexUtils.match(mobilephone, RegexUtils.REGEX_MOBILEPHONE)) {
+            return RestResp.fail(getMessage(I18NConst.FILL_PHONE_NUMBER_CORRECTLY));
         }
-        if(null == password || "".equals(password.trim())){
-            return RestResp.fail("密码不能为空");
+        String code = defaultKaptcha.createText();
+        saveVcode(mobilephone, code);
+        String content = String.format(/*signupSmsStr*/uresParam.getSignupSmsStr(), code);
+        log.info(content);
+        try {
+            boolean flag = smsService.sendSingleSms(mobilephone, content, /*smsCampaignId*/uresParam.getSmsCampaignId(), null);
+            if (flag) {
+                return RestResp.success(getMessage(I18NConst.SMS_BEEN_SEND) + mobilephone + getMessage(I18NConst.PLEASE_CHECK), null);
+            }
+            return RestResp.fail(getMessage(I18NConst.SMS_SENDING_FAILURE));
+        } catch (Exception e) {
+            log.error("短信发送异常", e);
+            return RestResp.fail(getMessage(I18NConst.SMS_SENDING_FAILURE));
+        }
+    }
+
+    public RestResp resetpwd(String resetkey, String password) {
+        User u = null;
+        if (resetkey == null || "".equals(resetkey.trim())) {
+            return RestResp.fail(getMessage(I18NConst.ACCOUNT_ILLAGAL));
+        }
+        if (null == password || "".equals(password.trim())) {
+            return RestResp.fail(getMessage(I18NConst.PASSWORD_NOT_EMPTY));
         }
 
-        if(resetkey.contains("@")){
+        if (resetkey.contains("@")) {
             u = userRepo.findByEmail(resetkey);
-        }else {
+        } else {
             u = userRepo.findByMobilephone(resetkey);
         }
-        if(null == u){
-            return RestResp.fail("重置密码失败");
+        if (null == u) {
+            return RestResp.fail(getMessage(I18NConst.RESET_PASSWORD_FAILURE));
         }
-        if(null !=password){
+        if (null != password) {
             u.setPassword(EncryptUtils.encodeSHA256(password));
             userRepo.save(u);
-            return RestResp.success("重置密码成功!",null);
+            if (/*discuzSyncResetpwd*/uresParam.isDiscuzSyncResetpwd() && null != u.getEmail()) {
+                boolean flag = UCHelper.resetpwd(u.getLoginname(), u.getEmail(), password);
+                if (!flag) {
+                    TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+                    return RestResp.fail(getMessage(I18NConst.RESET_PASSWORD_FAILURE), null);
+                }
+            }
+            return RestResp.success(getMessage(I18NConst.RESET_PASSWORD_SUCCESS), null);
         }
-        return RestResp.fail("重置密码失败");
+        return RestResp.fail(getMessage(I18NConst.RESET_PASSWORD_FAILURE));
     }
 
-    public RestResp active(String email){
-        if(email==null || "".equals(email) || !RegexUtils.match(email,RegexUtils.REGEX_EMAIL)){
-            return RestResp.fail("邮箱格式不正确，激活失败");
+    public RestResp active(String email) {
+        if (email == null || "".equals(email) || !RegexUtils.match(email, RegexUtils.REGEX_EMAIL)) {
+            return RestResp.fail(getMessage(I18NConst.MAIL_ADDRESS_ACTIVATE_FAILURE));
         }
         User user = userRepo.findByEmail(email);
-        if(null == user){
-            return RestResp.fail("该邮箱未注册，无法激活");
+        if (null == user) {
+            return RestResp.fail(getMessage(I18NConst.MAIL_ADDRESS_NOT_REGISTERED));
         }
-        if(user.getEnabled().equals(Status.EnableStatus.ENABLED.getStatus())){
-            return RestResp.fail("账号已经激活，请勿重复操作");
-        }else {
+        if (user.getEnabled().equals(Status.EnableStatus.ENABLED.getStatus())) {
+            return RestResp.fail(getMessage(I18NConst.ACCOUNT_BEEN_ACTIVATED));
+        } else {
             user.setEnabled(Status.EnableStatus.ENABLED.getStatus());
             userRepo.save(user);
-            return RestResp.success("账号激活成功",null);
+            return RestResp.success(getMessage(I18NConst.ACCOUNT_ACTIVATION_SUCCESS), null);
         }
     }
-    public RestResp sendMail(String email ,String subject,String content){
-        if(email==null || "".equals(email) || !RegexUtils.match(email,RegexUtils.REGEX_EMAIL)){
-            return RestResp.fail("请正确填写邮箱");
+
+    public RestResp sendMail(String email, String subject, String content) {
+        if (email == null || "".equals(email) || !RegexUtils.match(email, RegexUtils.REGEX_EMAIL)) {
+            return RestResp.fail(getMessage(I18NConst.FILL_MAIL_ADDRESS_CORRECTLY));
         }
-        if(content==null || "".equals(content.trim()) ){
-            return RestResp.fail("发送内容不能为空");
+        if (content == null || "".equals(content.trim())) {
+            return RestResp.fail(getMessage(I18NConst.SEND_CONTENT_NOT_EMPTY));
         }
         try {
-            mailService.sendHtmlMail(email,subject,content);
-            return RestResp.success("邮件已发送到："+email+"，请前往查收",null);
-        }catch (Exception e){
-            log.error("邮件发送异常",e);
-            return RestResp.fail("邮件发送失败,请重新操作");
+            mailService.sendHtmlMail(email, subject, content);
+            return RestResp.success(getMessage(I18NConst.MAIL_BEEN_SEND) + email + getMessage(I18NConst.PLEASE_CHECK), null);
+        } catch (Exception e) {
+            log.error("邮件发送异常", e);
+            return RestResp.fail(getMessage(I18NConst.SEND_MAIL_FAILED));
         }
     }
 
-    public RestResp addBitcoinAddress(String loginname,String firstAddress){
-        if(null == loginname || "".equals(loginname.trim())){
-            return RestResp.fail("用户名不正确");
+//    public RestResp addBitcoinAddress(String loginname, String firstAddress) {
+//        if (null == loginname || "".equals(loginname.trim())) {
+//            return RestResp.fail(getMessage(I18NConst.USERNAME_INCORRECT));
+//        }
+//        if (null == firstAddress || "".equals(firstAddress.trim()) || firstAddress.length() < 26 || firstAddress.length() > 34) {
+//            return RestResp.fail(getMessage(I18NConst.FILL_RECEIVABLE_ADDRESS_CORRECTLY));
+//        }
+//        firstAddress = firstAddress.trim();
+//        User user = userRepo.findByLoginname(loginname);
+//        if (null == user) {
+//            return RestResp.fail(getMessage(I18NConst.USERNAME_INCORRECT));
+//        }
+//        if (firstAddress.equals(user.getFirstAddress())) {
+//            return RestResp.fail(getMessage(I18NConst.NOT_CHANGED_ADDRESS));
+//        }
+//        user.setFirstAddress(firstAddress);
+//        userRepo.save(user);
+//        return RestResp.success(getMessage(I18NConst.ACTION_SUCCESS), firstAddress);
+//
+//    }
+
+    public RestResp vlist(Integer pageSize, Integer pageNo) {
+        pageNo = pageNo == null ? 1 : pageNo;
+        pageSize = pageSize == null ? 10 : pageSize;
+        Pageable pager = new PageRequest(pageNo - 1, pageSize);
+        try {
+            Page<ApplyV> page = applyvRepo.findByStatus(Const.APPLYV.APPLIED.getStatus(), pager);
+            List<ApplyV> list = page.getContent();
+            final List<Long> userIds = new ArrayList<>(list.size());
+            list.stream().forEach(applyV -> {
+                userIds.add(applyV.getUserId());
+            });
+
+            List<User> users = userRepo.findByIdIn(userIds);
+            List<ApplyVVO> result = new ArrayList<>(list.size());
+            for (ApplyV applyV : list) {
+                ApplyVVO vvo = new ApplyVVO(applyV);
+                for (User user : users) {
+                    if (applyV.getUserId().equals(user.getId())) {
+                        vvo.setUsername(user.getLoginname());
+                    }
+                }
+                result.add(vvo);
+            }
+            return RestRespPage.success(result, page.getTotalElements());
+        } catch (Exception e) {
+            log.error("获取申请列表失败", e);
+            return RestResp.fail(getMessage(I18NConst.OBTAIN_APPLICATION_LIST_FAILURE));
         }
-        if(null == firstAddress || "".equals(firstAddress.trim()) || firstAddress.length()<26 || firstAddress.length()>34){
-            return RestResp.fail("未正确填写收款地址,请重新填写");
-        }
-        firstAddress = firstAddress.trim();
-        User user = userRepo.findByLoginname(loginname);
-        if(null == user){
-            return RestResp.fail("用户名不正确");
-        }
-        if(firstAddress.equals(user.getFirstAddress())){
-            return RestResp.fail("您未修改地址");
-        }
-        user.setFirstAddress(firstAddress);
-        userRepo.save(user);
-        return RestResp.success("操作成功",firstAddress);
 
     }
 
-    public RestResp applyV(Long userId){
-        try{
+    public RestResp applyV(Long userId) {
+        try {
             ApplyV applyV = applyvRepo.findByUserId(userId);
-            if(null != applyV){
-                return RestResp.fail("您已经提交过申请,请勿重复提交");
+            if (null != applyV) {
+                return RestResp.fail(getMessage(I18NConst.SUBMITTED_APPLICATION));
             }
 
-            applyV = new ApplyV(userId,new Date(),Const.APPLYV.APPLIED.getStatus());
+            applyV = new ApplyV(userId, new Date(), Const.APPLYV.APPLIED.getStatus());
             applyV = applyvRepo.save(applyV);
-            return RestResp.success("申请已经提交,等待审核中");
-        }catch (Exception e){
-            log.error("申请异常",e);
-            return RestResp.fail("申请异常");
+            return RestResp.success(getMessage(I18NConst.APPLICATON_BEEN_SUBMITED));
+        } catch (Exception e) {
+            log.error("申请异常", e);
+            return RestResp.fail(getMessage(I18NConst.APPLICATION_EXECPTION));
         }
     }
 
-    public RestResp applyV(Long userId,Integer status){
+    public RestResp applyV(Long userId, Integer status) {
         String msg = null;
-        try{
+        try {
             ApplyV applyV = applyvRepo.findByUserId(userId);
-            if(null == applyV){
-                return RestResp.fail("您还提交过申请");
+            if (null == applyV) {
+                return RestResp.fail(getMessage(I18NConst.HAVE_NOT_SUBMITED_APPLICATION));
             }
             List<UserRole> userRoles = userRoleRepo.findByUserId(userId);
-            if(status.equals(Const.APPLYV.CANCELED.getStatus())){
-                msg = "取消申请成功";
-            }else if(status.equals(Const.APPLYV.APPROVED.getStatus())){
+            if (status.equals(Const.APPLYV.CANCELED.getStatus())) {
+                msg = getMessage(I18NConst.CANEL_APPLICATION_SUCCESS);
+            } else if (status.equals(Const.APPLYV.APPROVED.getStatus())) {
                 boolean isv = false;
-                for(UserRole userRole: userRoles){
-                    if(userRole.getRoleId().equals(Const.ROLE.V.getId())){
-                        msg = "您已是大V用户";
+                for (UserRole userRole : userRoles) {
+                    if (userRole.getRoleId().equals(Const.ROLE.V.getId())) {
+                        msg = getMessage(I18NConst.ALREADY_BIG_V_USER);
                         isv = true;
                         break;
                     }
                 }
-                if(!isv){
-                    UserRole userRole = new UserRole(userId,Const.ROLE.V.getId());
+                if (!isv) {
+                    UserRole userRole = new UserRole(userId, Const.ROLE.V.getId());
                     userRole = userRoleRepo.save(userRole);
-                    msg = "批准申请";
+                    msg = getMessage(I18NConst.APPROVAL_APPLICATION);
                 }
-            }else if(status.equals(Const.APPLYV.REJECTED.getStatus())){
-                msg = "拒绝申请";
-            }else {
+            } else if (status.equals(Const.APPLYV.REJECTED.getStatus())) {
+                msg = getMessage(I18NConst.REFUSE_APPLICATION);
+            } else {
 
             }
             applyV.setStatus(status);
             applyV = applyvRepo.save(applyV);
             return RestResp.success(msg);
-        }catch (Exception e){
-            log.error("申请异常",e);
-            return RestResp.fail("申请异常");
+        } catch (Exception e) {
+            log.error("申请异常", e);
+            return RestResp.fail(getMessage(I18NConst.APPLICATION_EXECPTION));
         }
     }
 
-    private void addUserRole(Long userId,Long roleId){
-        if(null == userId || null == roleId){
+    public RestResp getUsers(String userIds) {
+        if (null != userIds && !"".equals(userIds)) {
+            String[] ids = userIds.split(Const.SEPARATOR_COMMA);
+            List<Long> list = new ArrayList<>(ids.length);
+            for (String id : ids) {
+                list.add(Long.valueOf(id));
+            }
+            List<User> users = userRepo.findByIdIn(list);
+            return RestResp.success(users);
+        }
+        return RestResp.success();
+    }
+
+    public RestResp activitySign(String email){
+        if(null == email || "".equals(email) || !RegexUtils.match(email, RegexUtils.REGEX_EMAIL)){
+            return RestResp.fail(getMessage(I18NConst.FILL_MAIL_ADDRESS_CORRECTLY));
+        }
+        try{
+            UserActivity userActivity = userActivityRepo.findByActivityIdAndSignUser(/*activityId*/uresParam.getActivityId(),email);
+            if(null != userActivity){
+                return RestResp.fail(getMessage(I18NConst.SIGN_UP_MSG_ALREADY));
+            }
+            userActivity = new UserActivity();
+            userActivity.setActivityId(/*activityId*/uresParam.getActivityId());
+            userActivity.setSignTime(new Date());
+            userActivity.setSignUser(email);
+            String content = FileUtils.readFileToString(/*mailContentFile*/uresParam.getMailContentFile());
+            log.info(content);
+            MailVO vo = new MailVO(/*activityEmailUser*/uresParam.getActivityEmailUser(),/*activityEmailAddr*/uresParam.getActivityEmailAddr(),null,email,/*mailSubject*/uresParam.getMailSubject(),content, Const.MAIL_TYPE_HTML);
+            //sendGridService.sendHtmlMail(activityEmailAddr,email,mailSubject,content);
+            sendGridService.sendMail(vo);
+            userActivity = userActivityRepo.save(userActivity);
+            if(null != userActivity){
+                return RestResp.success(getMessage(I18NConst.SIGN_UP_MSG_SUCCESS),userActivity);
+            }
+        }catch (Exception e) {
+            log.error(getMessage(I18NConst.SIGN_UP_MSG_FAILURE),e);
+        }
+        return RestResp.fail(getMessage(I18NConst.SIGN_UP_MSG_FAILURE));
+    }
+
+    private void addUserRole(Long userId, Long roleId) {
+        if (null == userId || null == roleId) {
             return;
         }
-        UserRole userRole = userRoleRepo.findByUserIdAndRoleId(userId,roleId);
-        if(null == userRole){
-            userRole = new UserRole(userId,roleId);
+        UserRole userRole = userRoleRepo.findByUserIdAndRoleId(userId, roleId);
+        if (null == userRole) {
+            userRole = new UserRole(userId, roleId);
             userRoleRepo.save(userRole);
         }
     }
 
-    private Set<String> getRoles(Long userId){
-        if (null == userId){
+    public Set<String> getRoles(Long userId) {
+        if (null == userId) {
             return null;
         }
         Set<String> set = new HashSet<>();
         List<UserRole> list = userRoleRepo.findByUserId(userId);
-        if(null == list || list.size()<1){
+        if (null == list || list.size() < 1) {
             set.add("user");
             return set;
         }
@@ -765,10 +933,104 @@ public class UserService{
             ll.add(userRole.getRoleId());
         });
         List<Role> roles = roleRepo.findByIdIn(ll);
-        for(Role role: roles){
-            set.add(role.getRoleName());
+        for (Role role : roles) {
+            set.add(role.getRoleSign());
         }
         return set;
     }
 
+    public RestResp checkUserExist(String name, int nameType) {
+        User user = null;
+        if (nameType == Const.CFIELD.LOGIN_NAME.getFieldValue()) {
+            user = userRepo.findByLoginname(name);
+        } else if (nameType == Const.CFIELD.EMAIL.getFieldValue()) {
+            if (!RegexUtils.match(name, RegexUtils.REGEX_EMAIL)) {
+                return RestResp.fail(getMessage(I18NConst.FILL_MAIL_ADDRESS_CORRECTLY));
+            }
+            user = userRepo.findByEmail(name);
+        } else if (nameType == Const.CFIELD.MOBILE_PHONE.getFieldValue()) {
+            if (!RegexUtils.match(name, RegexUtils.REGEX_MOBILEPHONE)) {
+                return RestResp.fail(getMessage(I18NConst.FILL_PHONE_NUMBER_CORRECTLY));
+            }
+            user = userRepo.findByMobilephone(name);
+        } else {
+
+        }
+        if (null != user) {
+            return RestResp.success(getMessage(I18NConst.VERIFICATION_SUCCESS));
+        }
+        return RestResp.fail(getMessage(I18NConst.VERIFICATION_FAILURE));
+    }
+
+    public RestResp checkLoginname(String loginname) {
+        if (null == loginname || !RegexUtils.match(loginname, RegexUtils.REGEX_NAME_LEN15)) {
+            return RestResp.fail(getMessage(I18NConst.LOGIN_NAME_FORMAT));
+        }
+        User user = userRepo.findByLoginname(loginname);
+        if (null != user) {
+            return RestResp.fail(getMessage(I18NConst.USER_ALREADY_EXIST));
+        }
+        return RestResp.success(getMessage(I18NConst.VERIFICATION_SUCCESS));
+    }
+
+    public RestResp checkEmail(String email) {
+        if (null == email || !RegexUtils.match(email, RegexUtils.REGEX_EMAIL)) {
+            return RestResp.fail(getMessage(I18NConst.FILL_MAIL_ADDRESS_CORRECTLY));
+        }
+        User user = userRepo.findByEmail(email);
+        if (null != user) {
+            return RestResp.fail(getMessage(I18NConst.MAIL_ADDRESS_BEEN_USED));
+        }
+        return RestResp.success(getMessage(I18NConst.VERIFICATION_SUCCESS));
+    }
+
+    public RestResp checkMobilephone(String mobilephone) {
+        if (null == mobilephone || !RegexUtils.match(mobilephone, RegexUtils.REGEX_MOBILEPHONE)) {
+            return RestResp.fail(getMessage(I18NConst.FILL_PHONE_NUMBER_CORRECTLY));
+        }
+        User user = userRepo.findByMobilephone(mobilephone);
+        if (null != user) {
+            return RestResp.fail(getMessage(I18NConst.PHONE_NUMBER_BEEN_USED));
+        }
+        return RestResp.success(getMessage(I18NConst.VERIFICATION_SUCCESS));
+    }
+
+
+
+    public RestResp token(UserVO vo){
+        Optional<User> optional = findUser(vo);
+        if(optional.isPresent()){
+           return optional.map(u -> {
+                UserVO userInfo = new UserVO(u);
+                userInfo.setRoles(getRoles(u.getId()));
+                String token = jwtService.generate(userInfo);
+                return RestResp.success(token);
+            }).orElse(RestResp.fail());
+        }
+        return RestResp.fail();
+    }
+
+    public UserVO getUserVO(Long id){
+        User user = userRepo.findOne(id);
+        if(null != user){
+            UserVO userInfo = new UserVO(user);
+            userInfo.setPassword(user.getPassword());
+            userInfo.setRoles(getRoles(userInfo.getId()));
+            return userInfo;
+        }
+        return null;
+    }
+    public UserVO getUserVO(String loginname){
+        User user = userRepo.findByLoginname(loginname);
+        if(null != user){
+            UserVO userInfo = new UserVO(user);
+            userInfo.setPassword(user.getPassword());
+            userInfo.setRoles(getRoles(userInfo.getId()));
+            return userInfo;
+        }
+        return null;
+    }
+    private String getMessage(String code) {
+        return myMessageSource.getMessage(code);
+    }
 }

@@ -1,7 +1,8 @@
 package info.investdigital.rest;
-import info.investdigital.common.RestResp;
+
 import info.investdigital.common.GoogleAuthenticator;
 import info.investdigital.common.QrcodeUtils;
+import info.investdigital.common.RestResp;
 import info.investdigital.service.GoogleSecretService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -19,8 +20,6 @@ import java.io.ByteArrayOutputStream;
 
 @RestController
 public class GoogleSecretController {
-
-
     @Autowired
     private GoogleSecretService googleSecretService;
 
@@ -74,12 +73,12 @@ public class GoogleSecretController {
 
     @PostMapping("/authgooglecode/{id}")
     public RestResp authGoogleCode(@RequestParam String code,
-                                   @PathVariable("id") Long u_id){
-        return googleSecretService.authGoogleCode(code,u_id);
+                                   @PathVariable("id") Long uid){
+        return googleSecretService.authGoogleCode(code,uid);
     }
 
     @PostMapping("/authgooglecode}")
-    public RestResp authGoogleCode(@RequestParam String email,@RequestParam String code){
+    public RestResp authGoogleCode(@RequestParam String email, @RequestParam String code){
         return googleSecretService.authGoogleCode(code,email);
     }
 

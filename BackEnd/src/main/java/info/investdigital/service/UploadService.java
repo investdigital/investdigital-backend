@@ -1,6 +1,8 @@
 package info.investdigital.service;
 
 import com.oxchains.basicService.files.tfsService.TFSConsumer;
+import info.investdigital.common.I18NConst;
+import info.investdigital.common.MyMessageSource;
 import info.investdigital.common.RestResp;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -10,7 +12,9 @@ import org.springframework.web.multipart.commons.CommonsMultipartResolver;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
-import java.util.*;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Set;
 
 /**
  * @author ccl
@@ -23,6 +27,9 @@ import java.util.*;
 public class UploadService {
     @Resource
     TFSConsumer tfsConsumer;
+    
+     @Resource
+    private MyMessageSource myMessageSource;
 
     public RestResp uploadImage(HttpServletRequest request, Long userId){
         CommonsMultipartResolver multipartResolver = new CommonsMultipartResolver(request.getSession().getServletContext());
@@ -42,7 +49,7 @@ public class UploadService {
                     }
                 }
             }
-            return RestResp.success("图片上传成功",newNames);
+            return RestResp.success(myMessageSource.getMessage(I18NConst.IMAGE_UPLOAD_SUCCESS),newNames);
         }
         return RestResp.fail();
     }

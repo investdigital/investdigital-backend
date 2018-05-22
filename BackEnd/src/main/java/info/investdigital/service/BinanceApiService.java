@@ -31,7 +31,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import static info.investdigital.AssetsAPI.binance.common.BinanceConst.*;
+import static info.investdigital.AssetsAPI.binance.common.BinanceConst.ALL_CURRENCY;
+import static info.investdigital.AssetsAPI.binance.common.BinanceConst.BA_MAP;
 
 /**
  * @author luoxuri
