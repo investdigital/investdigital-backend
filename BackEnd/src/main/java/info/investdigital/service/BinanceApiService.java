@@ -12,6 +12,7 @@ import info.investdigital.AssetsAPI.binance.BinanceApi;
 import info.investdigital.AssetsAPI.binance.entity.DepositWithDraw;
 import info.investdigital.AssetsAPI.binance.exception.BinanceException;
 import info.investdigital.AssetsAPI.dto.BalanceDTO;
+import info.investdigital.AssetsAPI.huobi.entity.price.Kind;
 import info.investdigital.common.HttpUtils;
 import info.investdigital.common.JsonUtil;
 import info.investdigital.common.ResourceParam;
