@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.oxchains.message.grpc.lib";
+option java_outer_classname = "SaveProto";
+option objc_class_prefix = "SP";
+
+package lib;
+
+service Simple {
+    rpc Save (Request) returns (Response) {}
+}
+
+message Request {
+    // 这是要保存到数据库的字段
+    int64 informType = 1; // 消息通知类型
+    int32 messageType = 2; // 消息类型
+    int64 receiverId = 3; // 接受者Id
+    string message = 4; // 消息主体
+    string orderId = 5; // 订单ID
+    int64 sendId = 6; // 发送者Id，如果是系统就是0
+    string logo = 7; // 项目标识
+
+    // =====================================
+    // 以下是如果要同时通知移动端需要的
+
+    string registrationId = 8; // 设备标识
+    string notificationTitle = 9; // 通知内容标题
+    string notificationSummary = 10; // 通知内容摘要
+    string msgTitle = 11; // 消息内容标题
+    string msgContent = 12; // 消息内容
+    string extrasParam = 13; // 扩展字段
+
+}
+
+message Response {
+    bool message = 1;
+}
